@@ -6,6 +6,20 @@ list of things to do at the piano today.
 Open `index.html` in a browser. That's it — no build, no install, no server, no
 accounts. Progress is stored in the browser's `localStorage`.
 
+## On a phone
+
+`node build.js` inlines the CSS and JS into two single-file builds:
+
+- `dist/index.html` — a standalone page. Host it anywhere static (GitHub Pages:
+  Settings → Pages → deploy from this branch, `/` root), or open it straight
+  from a file. On iOS, Share → **Add to Home Screen** gives it an app icon and
+  runs it without Safari chrome.
+- `dist/artifact.html` — the same page as a fragment for publishing as a Claude
+  Artifact.
+
+Progress is per-origin, so each place you open it keeps its own history. Move it
+with **Progress → Export** / **Import**.
+
 ## What it does
 
 **Tells you exactly what to practise.** Pick a length (5 to 45 minutes) and press
