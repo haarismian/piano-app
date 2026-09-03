@@ -10,12 +10,15 @@ accounts. Progress is stored in the browser's `localStorage`.
 
 `node build.js` inlines the CSS and JS into two single-file builds:
 
-- `dist/index.html` — a standalone page. Host it anywhere static (GitHub Pages:
-  Settings → Pages → deploy from this branch, `/` root), or open it straight
-  from a file. On iOS, Share → **Add to Home Screen** gives it an app icon and
-  runs it without Safari chrome.
+- `dist/index.html` — a standalone page. Host it anywhere static, or open it
+  straight from a file.
 - `dist/artifact.html` — the same page as a fragment for publishing as a Claude
   Artifact.
+
+The repo root also works as-is on GitHub Pages — **Settings → Pages → deploy
+from branch, `/` root** serves `index.html` and its `css/` and `js/` folders.
+On iOS, Share → **Add to Home Screen** then gives it an icon and runs it
+fullscreen without Safari chrome.
 
 Progress is per-origin, so each place you open it keeps its own history. Move it
 with **Progress → Export** / **Import**.
