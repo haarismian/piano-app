@@ -224,6 +224,8 @@
         return '<button class="mini' + (m === dur ? ' on' : '') + '" data-dur="' + m + '">' + m + ' min</button>';
       }).join('') + '</div>' +
       '<button class="btn wide" data-start style="margin-top:12px">Start session ' + S.sessionNumber() + '</button>' +
+      '<p class="tiny muted" style="margin:10px 0 0;text-align:center">Not where you actually are? ' +
+      '<button class="linky" data-view="path">Pick any unit from the full list</button></p>' +
       '</div>';
 
     html += '<div class="card"><div class="spread"><h3>Where you are</h3>' +
@@ -261,8 +263,11 @@
       '<div class="spread"><div>' +
       '<div class="pill">Session ' + sess.n + '</div>' +
       '<h1 style="margin-top:9px">Unit ' + sess.unitNumber + ' — ' + esc(sess.unitTitle) + '</h1>' +
-      '<p class="sub">' + sess.minutes + ' minutes · ' + sess.items.length + ' steps · ' +
-      doneCount + ' done</p></div>' +
+      '<p class="sub">' + sess.minutes + ' minutes · ' + sess.items.length + ' step' +
+      (sess.items.length === 1 ? '' : 's') + ' · ' + doneCount + ' done</p>' +
+      (sess.oneOff ? '<p class="tiny muted" style="margin:6px 0 0">One-off ' +
+        (sess.single ? 'drill' : 'session') + ' — your place on the path stays at unit ' +
+        (S.load().currentUnitIndex + 1) + '.</p>' : '') + '</div>' +
       '<button class="mini ghost" data-abandon title="Discard this session">Discard</button></div>' +
       '<div class="meter" style="margin-top:12px"><i style="width:' + pct + '%"></i></div>' +
       '</div>';
@@ -350,29 +355,93 @@
   }
 
   // ---------------------------------------------------------------- path
+  var pathQuery = '';
+
+  /* Search across everything a unit is about — "flat keys", "shell", "rubato",
+     "Alberti", "Eb" — but weight where the words landed, so a unit whose title
+     is about flat keys beats one that merely says "feet flat" and "white keys"
+     somewhere in its instructions. */
+  var FIELD_WEIGHT = [
+    [function (u) { return u.title; }, 6],
+    [function (u) { return u.goal + ' ' + u.keys.join(' '); }, 3],
+    [function (u) { return u.why + ' ' + u.stageTitle + ' unit ' + u.number; }, 2],
+    [function (u) { return u.exercises.map(function (e) { return e.title; }).join(' '); }, 2],
+    [function (u) { return u.checkpoint.title + ' ' + u.checkpoint.criteria.join(' '); }, 1],
+    [function (u) { return u.exercises.map(function (e) { return e.steps.join(' '); }).join(' '); }, 0.5]
+  ];
+
+  function unitScore(u, q) {
+    if (!q) return 1;
+    var words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    var fields = FIELD_WEIGHT.map(function (f) { return [f[0](u).toLowerCase(), f[1]]; });
+    var total = 0;
+    for (var i = 0; i < words.length; i++) {
+      var best = 0;
+      for (var j = 0; j < fields.length; j++) {
+        if (fields[j][0].indexOf(words[i]) >= 0 && fields[j][1] > best) best = fields[j][1];
+      }
+      if (!best) return 0;          // every word must appear somewhere
+      total += best;
+    }
+    return total;
+  }
+
+  function unitMatches(u, q) { return unitScore(u, q) > 0; }
+
   function renderPath() {
     var st = S.load();
+    var q = pathQuery.trim();
+    var hits = C.units.filter(function (u) { return unitMatches(u, q); });
+
     var html = '<div class="card"><div class="spread"><div><h3>The path</h3>' +
-      '<p class="small muted" style="margin:4px 0 0">' + C.count + ' units, in order. ' +
-      'Each one ends in a checkpoint you assess yourself against. Passing it unlocks the next.</p></div>' +
+      '<p class="small muted" style="margin:4px 0 0">' + C.count + ' units, in order. Each ends in a ' +
+      'checkpoint you assess yourself against.</p></div>' +
       '<div style="text-align:right"><b style="font-size:22px">' + (st.currentUnitIndex + 1) + '</b>' +
       '<div class="tiny muted">of ' + C.count + '</div></div></div>' +
       '<div class="meter" style="margin-top:12px"><i style="width:' +
-      Math.round(st.currentUnitIndex / C.count * 100) + '%"></i></div></div>';
+      Math.round(st.currentUnitIndex / C.count * 100) + '%"></i></div>' +
+      '<p class="tiny muted" style="margin:10px 0 0">New device, or already know some of this? ' +
+      'Open any unit below and press <b>Start here</b> to move your place on the path. ' +
+      'You can practise any unit without moving it.</p>' +
+      '<input type="text" data-pathq value="' + esc(pathQuery) + '" ' +
+      'placeholder="Search all ' + C.count + ' units — try &quot;flat keys&quot;, &quot;rubato&quot;, &quot;shell&quot;" ' +
+      'style="width:100%;margin-top:12px">' +
+      (q ? '<p class="tiny muted" style="margin:8px 0 0">' + hits.length + ' of ' + C.count +
+        ' units match. <button class="mini ghost" data-pathclear>Clear</button></p>' : '') +
+      '</div>';
 
-    C.stages.forEach(function (stage) {
+    if (q && !hits.length) {
+      html += '<div class="card"><p class="small muted" style="margin:0">Nothing matches ' +
+        '&ldquo;' + esc(q) + '&rdquo;. Try a key name, a technique, or part of a unit title.</p></div>';
+      return html;
+    }
+
+    /* With a query, rank across the whole course; without one, keep the stage
+       grouping that shows the shape of the path. */
+    var groups = q
+      ? [{ title: 'Best matches', blurb: 'Ranked across all ' + C.count + ' units.',
+           units: hits.slice().sort(function (a, bb) { return unitScore(bb, q) - unitScore(a, q); }) }]
+      : C.stages;
+
+    groups.forEach(function (stage) {
+      var units = stage.units;
+      if (!units.length) return;
       html += '<div class="stage"><h2>' + esc(stage.title) + '</h2><p>' + esc(stage.blurb) + '</p>';
-      stage.units.forEach(function (u) {
+      units.forEach(function (u) {
         var passed = S.isPassed(u.id);
         var cur = u.index === st.currentUnitIndex;
-        var locked = u.index > st.currentUnitIndex;
-        var cls = 'unit' + (passed ? ' done' : '') + (cur ? ' cur' : '') + (locked ? ' locked' : '');
+        var ahead = u.index > st.currentUnitIndex;
+        var state = cur ? 'current' : passed ? (S.isAssumed(u.id) ? 'skipped' : 'passed')
+          : ahead ? 'ahead' : 'available';
+        var cls = 'unit' + (passed ? ' done' : '') + (cur ? ' cur' : '') + (ahead ? ' ahead' : '');
         html += '<div class="' + cls + '">' +
           '<button class="unithead" data-unit="' + u.id + '">' +
           '<span class="un">' + (passed ? '&#10003;' : u.number) + '</span>' +
-          '<span class="ut">' + esc(u.title) + '</span>' +
-          '<span class="tiny muted">' + (locked ? 'locked' : cur ? 'current' : 'passed') + '</span></button>';
-        if (openUnit === u.id) html += unitBody(u, locked, cur, passed);
+          '<span class="ut">' + esc(u.title) +
+          (q ? '<span class="tiny muted" style="display:block;font-weight:400">Unit ' + u.number +
+            ' &middot; ' + esc(u.stageTitle) + '</span>' : '') + '</span>' +
+          '<span class="tiny muted">' + state + '</span></button>';
+        if (openUnit === u.id) html += unitBody(u, cur, passed, ahead);
         html += '</div>';
       });
       html += '</div>';
@@ -380,17 +449,30 @@
     return html;
   }
 
-  function unitBody(u, locked, cur, passed) {
+  function unitBody(u, cur, passed, ahead) {
     var ready = Sess.readiness(u);
+    var mins = S.setting('minutes') || 15;
     var body = '<div class="unitbody">' +
       '<p class="goal"><b>Objective:</b> ' + esc(u.goal) + '</p>' +
       '<p class="why">' + esc(u.why) + '</p>' +
       '<p class="tiny muted">Working keys: ' + esc(u.keys.join(', ')) + '</p>' +
+
+      '<div class="row" style="margin:12px 0">' +
+      '<button class="' + (cur ? 'btn' : 'mini') + '" data-practice="' + u.index + '">' +
+      'Practise this unit &middot; ' + mins + ' min</button>' +
+      (cur ? '' : '<button class="mini" data-jump="' + u.index + '">Start here</button>') +
+      '</div>' +
+      (cur ? '' : '<p class="tiny muted" style="margin:-4px 0 10px">' +
+        '<b>Practise</b> runs a session on this unit and leaves your place alone. ' +
+        '<b>Start here</b> moves your place on the path to unit ' + u.number + '.</p>') +
+
+      '<p class="tiny muted" style="margin-bottom:4px">Exercises — tap one to drill it on its own.</p>' +
       '<ul class="exlist">' + u.exercises.map(function (e) {
         var r = S.reps(e.id), t = e.reps || 8;
-        return '<li><span class="pill ' + ({ warmup: 'warm', core: 'core', apply: 'app' }[e.role]) + '">' +
-          e.role + '</span><span>' + esc(e.title) + '</span>' +
-          '<span class="reps' + (r >= t ? ' hit' : '') + '">' + r + '/' + t + '</span></li>';
+        return '<li><button class="exrow" data-drill="' + e.id + '">' +
+          '<span class="pill ' + ({ warmup: 'warm', core: 'core', apply: 'app' }[e.role]) + '">' +
+          e.role + '</span><span class="exname">' + esc(e.title) + '</span>' +
+          '<span class="reps' + (r >= t ? ' hit' : '') + '">' + r + '/' + t + '</span></button></li>';
       }).join('') + '</ul>';
 
     body += '<div class="checkbox"><h4>Checkpoint — ' + esc(u.checkpoint.title) + '</h4>' +
@@ -399,13 +481,18 @@
       '<p class="tiny muted" style="margin:-6px 0 10px">Recommended reps: ' + Math.round(ready * 100) + '% complete.</p>';
 
     if (passed) {
-      body += '<button class="mini" data-unpass="' + u.id + '">Reopen this unit</button>';
+      body += '<div class="row">' +
+        (S.isAssumed(u.id)
+          ? '<span class="tiny muted">Marked done when you skipped ahead, not assessed here.</span>'
+          : '') +
+        '<button class="mini" data-unpass="' + u.id + '">Reopen this unit</button></div>';
     } else if (cur) {
       body += '<button class="btn" data-pass="' + u.id + '">I can do all of these — pass</button>' +
         (ready < 0.5 ? '<p class="tiny muted" style="margin:8px 0 0">You have not done many reps yet. ' +
           'Pass it anyway if you genuinely meet the criteria.</p>' : '');
     } else {
-      body += '<p class="tiny muted">Finish unit ' + (S.load().currentUnitIndex + 1) + ' first.</p>';
+      body += '<p class="tiny muted" style="margin:0">You are on unit ' + (S.load().currentUnitIndex + 1) +
+        '. Press <b>Start here</b> above if this is really where you are.</p>';
     }
     body += '</div></div>';
     return body;
@@ -566,7 +653,7 @@
 
   // ---------------------------------------------------------------- events
   document.addEventListener('click', function (ev) {
-    var t = ev.target.closest ? ev.target.closest('[data-view],[data-dur],[data-start],[data-open],[data-done],[data-undone],[data-skip],[data-abandon],[data-finish],[data-unit],[data-pass],[data-unpass],[data-play],[data-met],[data-call],[data-reveal],[data-timer-toggle],[data-timer-reset],[data-export],[data-import],[data-reset]') : null;
+    var t = ev.target.closest ? ev.target.closest('[data-view],[data-dur],[data-start],[data-open],[data-done],[data-undone],[data-skip],[data-abandon],[data-finish],[data-unit],[data-pass],[data-unpass],[data-practice],[data-jump],[data-drill],[data-pathclear],[data-play],[data-met],[data-call],[data-reveal],[data-timer-toggle],[data-timer-reset],[data-export],[data-import],[data-reset]') : null;
     if (!t) return;
     var a;
 
@@ -617,6 +704,37 @@
     }
 
     if ((a = t.getAttribute('data-unit'))) { openUnit = (openUnit === a ? null : a); keepScroll(); render(); return; }
+
+    if ((a = t.getAttribute('data-practice')) !== null && a !== undefined) {
+      var pIdx = parseInt(a, 10);
+      var ps = Sess.build(S.setting('minutes') || 15, pIdx);
+      S.setActive(ps); openStep = 0; openUnit = null; stopTimer(); view = 'today'; render();
+      return;
+    }
+
+    if ((a = t.getAttribute('data-drill'))) {
+      var ds = Sess.buildSingle(a);
+      if (ds) { S.setActive(ds); openStep = 0; openUnit = null; stopTimer(); view = 'today'; render(); }
+      return;
+    }
+
+    if ((a = t.getAttribute('data-jump')) !== null && a !== undefined) {
+      var jIdx = parseInt(a, 10);
+      var ju = C.unitAt(jIdx);
+      var behind = jIdx > S.load().currentUnitIndex;
+      var msg = 'Move your place on the path to unit ' + ju.number + ' — ' + ju.title + '?';
+      if (behind) {
+        msg += '\n\nUnits 1-' + ju.number + ' before it will be marked done so the path stays ' +
+          'consistent. Only do this for material you can already play.';
+      }
+      if (confirm(msg)) {
+        S.setCurrentUnit(jIdx, behind);
+        openUnit = null; stopTimer(); view = 'today'; render();
+      }
+      return;
+    }
+
+    if (t.hasAttribute('data-pathclear')) { pathQuery = ''; keepScroll(); render(); return; }
 
     if ((a = t.getAttribute('data-pass'))) {
       var uu = C.unit(a);
@@ -670,6 +788,16 @@
   });
   document.addEventListener('input', function (ev) {
     var t = ev.target;
+    if (t.hasAttribute && t.hasAttribute('data-pathq')) {
+      clearTimeout(window.__pq);
+      var val = t.value;
+      window.__pq = setTimeout(function () {
+        pathQuery = val; keepScroll(); render();
+        var box = $('[data-pathq]');
+        if (box) { box.focus(); box.setSelectionRange(val.length, val.length); }
+      }, 250);
+      return;
+    }
     if (t.getAttribute && t.getAttribute('data-note')) { S.setNote(t.getAttribute('data-note'), t.value); }
     if (t.getAttribute && t.getAttribute('data-ref') === 'numbers') {
       clearTimeout(window.__nt);

@@ -29,10 +29,13 @@
     return pool;
   }
 
-  /* build(minutes) -> session object */
-  function build(minutes) {
+  /* build(minutes, unitIndex) -> session object.
+     unitIndex defaults to wherever you are on the path; passing one builds a
+     one-off session on any other unit without moving your place. */
+  function build(minutes, unitIndex) {
     var st = global.Store.load();
-    var unit = global.Curriculum.unitAt(st.currentUnitIndex);
+    var idx = (unitIndex == null) ? st.currentUnitIndex : unitIndex;
+    var unit = global.Curriculum.unitAt(idx);
     var rot = st.rotation[unit.id] || 0;
     var budget = Math.max(5, minutes || 15);
 
@@ -40,7 +43,7 @@
     var warmups = byRole(unit, 'warmup');
     var cores = byRole(unit, 'core');
     var applies = byRole(unit, 'apply');
-    var reviews = reviewPool(st.currentUnitIndex);
+    var reviews = reviewPool(idx);
 
     // Block sizes, in minutes, before rescaling.
     var wantWarm = Math.min(5, Math.max(2, Math.round(budget * 0.15)));
@@ -126,6 +129,28 @@
       requested: budget,
       minutes: plan.reduce(function (a, p) { return a + p.minutes; }, 0),
       items: plan,
+      oneOff: idx !== st.currentUnitIndex,
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  /* A single exercise on its own, for when you want to drill one thing. */
+  function buildSingle(exerciseId, minutes) {
+    var e = global.Curriculum.exercises[exerciseId];
+    if (!e) return null;
+    var unit = global.Curriculum.unit(e.unitId);
+    var st = global.Store.load();
+    var mins = Math.max(2, minutes || e.minutes);
+    return {
+      n: global.Store.sessionNumber(),
+      unitId: unit.id, unitNumber: unit.number, unitTitle: unit.title,
+      requested: mins, minutes: mins,
+      items: [{
+        id: e.id, block: 'Core work', minutes: mins, step: 1, done: false,
+        title: e.title, type: e.type, fromUnit: e.unitNumber
+      }],
+      single: true,
+      oneOff: unit.index !== st.currentUnitIndex,
       createdAt: new Date().toISOString()
     };
   }
@@ -144,5 +169,5 @@
     return want ? got / want : 1;
   }
 
-  global.Session = { build: build, readiness: readiness };
+  global.Session = { build: build, buildSingle: buildSingle, readiness: readiness };
 })(typeof window !== 'undefined' ? window : this);

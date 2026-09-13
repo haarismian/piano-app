@@ -151,10 +151,17 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 .goal b{color:var(--accent);font-weight:650}
 .why{color:var(--dim);font-size:13.5px;margin:0 0 12px}
 .exlist{list-style:none;padding:0;margin:10px 0}
-.exlist li{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}
+.exlist li{border-bottom:1px solid var(--line)}
 .exlist li:last-child{border:0}
-.exlist .reps{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--dimmer);white-space:nowrap}
+.exrow{display:flex;gap:10px;align-items:center;width:100%;padding:9px 4px;background:none;border:0;
+  text-align:left;font-size:14px;border-radius:6px}
+.exrow:hover{background:var(--bg3)}
+.exrow .exname{flex:1}
+.exlist .reps{font-family:var(--mono);font-size:12px;color:var(--dimmer);white-space:nowrap}
 .exlist .reps.hit{color:var(--accent)}
+.unit.ahead{opacity:.72}
+.linky{background:none;border:0;padding:0;font:inherit;color:var(--accent);font-weight:600;
+  text-decoration:underline;text-underline-offset:2px}
 .checkbox{background:var(--bg3);border:1px solid var(--line);border-radius:9px;padding:13px 15px;margin-top:12px}
 .checkbox h4{font-size:13px;margin-bottom:8px}
 .checkbox ul{margin:0 0 12px;padding-left:20px;font-size:13.5px}

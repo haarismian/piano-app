@@ -70,6 +70,28 @@
 
   function isPassed(unitId) { return !!(load().checkpoints[unitId] || {}).passed; }
 
+  /* Move straight to any unit — for a new device, or for skipping material you
+     already have. markPrior records the earlier units as passed so the path
+     reads consistently; they are flagged `assumed` since you were not assessed
+     on them here. */
+  function setCurrentUnit(index, markPrior) {
+    var s = load();
+    var units = global.Curriculum.units;
+    index = Math.max(0, Math.min(units.length - 1, index));
+    if (markPrior) {
+      for (var i = 0; i < index; i++) {
+        if (!s.checkpoints[units[i].id]) {
+          s.checkpoints[units[i].id] = { passed: true, date: today(), assumed: true };
+        }
+      }
+    }
+    s.currentUnitIndex = index;
+    s.active = null;
+    save();
+  }
+
+  function isAssumed(unitId) { return !!(load().checkpoints[unitId] || {}).assumed; }
+
   function currentUnit() { return global.Curriculum.unitAt(load().currentUnitIndex); }
 
   function finishSession(sess) {
@@ -134,7 +156,8 @@
   global.Store = {
     load: load, save: save, today: today, reps: reps, bumpRep: bumpRep,
     passCheckpoint: passCheckpoint, unpassCheckpoint: unpassCheckpoint, isPassed: isPassed,
-    currentUnit: currentUnit, finishSession: finishSession,
+    currentUnit: currentUnit, setCurrentUnit: setCurrentUnit, isAssumed: isAssumed,
+    finishSession: finishSession,
     setActive: setActive, getActive: getActive, clearActive: clearActive,
     sessionNumber: sessionNumber, totalMinutes: totalMinutes, streak: streak,
     daysPractised: daysPractised, setNote: setNote, getNote: getNote, setting: setting,

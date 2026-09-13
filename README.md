@@ -20,8 +20,9 @@ from branch, `/` root** serves `index.html` and its `css/` and `js/` folders.
 On iOS, Share → **Add to Home Screen** then gives it an icon and runs it
 fullscreen without Safari chrome.
 
-Progress is per-origin, so each place you open it keeps its own history. Move it
-with **Progress → Export** / **Import**.
+Progress is per-origin, so each place you open it keeps its own history. Either
+move it with **Progress → Export** / **Import**, or just open the Path tab on the
+new device and press **Start here** on the unit you had reached.
 
 ## What it does
 
@@ -62,7 +63,15 @@ starting over.
 ## Tabs
 
 - **Today** — the session runner. Numbered steps, instructions, keyboards, timer.
-- **Path** — all 25 units with objectives, exercises, rep counts and checkpoints.
+- **Path** — all 25 units with objectives, exercises, rep counts and checkpoints,
+  searchable by keyword ("flat keys", "rubato", "Alberti") with results ranked
+  by where the words landed. Open any unit to:
+  - **Practise this unit** — run a session on it without moving your place.
+  - **Start here** — move your place on the path to it. Earlier units get marked
+    done and labelled *skipped*, so the path stays honest about what you were
+    actually assessed on. This is the quickest way back after switching devices.
+  - **Tap any exercise** to drill just that one thing.
+
   Pass a checkpoint here to advance; reopen a passed unit to go back and drill it.
 - **Reference** — key explorer (every chord in a key, triads or sevenths), a
   progression transposed into all 12 keys, chord lookup with every inversion and
