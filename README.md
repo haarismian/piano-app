@@ -31,16 +31,26 @@ start. You get a numbered list of steps with literal instructions, the chord
 shapes drawn on a keyboard, a target for each one ("done when…"), a timer and a
 metronome. Work down the list. Stop whenever — nothing is lost.
 
-**Progresses linearly.** 25 units across 6 stages, in order. Each unit has one
-objective, a handful of exercises and a checkpoint with concrete criteria.
-Passing the checkpoint unlocks the next unit. You always know what unit you're on
-and what step comes next — the header says so on every screen.
+**Progresses linearly, but practises on a spaced schedule.** 25 units across 6
+stages, in order. You move on once you have *met* each exercise in a unit —
+twice, not shakily — rather than once you have ground it to mastery. Mastery
+comes from review instead: every exercise carries its own schedule and comes
+back at a spreading interval, woven into later sessions, in a different key each
+time. A mid-course session typically spans four units and three keys.
 
-**Adapts to the time you have.** A session is built from four blocks — warm-up,
-core work on the current unit, spaced review of earlier units, and applying it —
-and scales to fit. Short sessions drop blocks from the bottom, so a 5-minute
-session is still a warm-up plus the thing you're actually meant to be learning.
-Consecutive sessions rotate through a unit's exercises so you cover all of it.
+Rate each exercise **Shaky / OK / Solid** as you finish it. Shaky brings it back
+next session; solid pushes it weeks out. Pressing a single button is enough —
+nothing needs configuring.
+
+**Adapts to the time you have.** A session is roughly a warm-up, a little new
+material, whatever is most overdue from everything behind it, and something to
+apply it to — scaled to fit 5 to 45 minutes. Consecutive steps are deliberately
+drawn from different units, so you are not doing one topic on repeat. Nothing is
+ever "overdue and owed": a week off costs you a reshuffle, not a backlog.
+
+**Instructions stay short.** Each step is a one-line cue you can read mid-playing.
+The explanation sits underneath it while the exercise is new and folds away once
+you've met it twice — tap *Show detail* to bring it back.
 
 ## The curriculum
 
