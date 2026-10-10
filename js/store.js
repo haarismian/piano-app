@@ -8,7 +8,8 @@
       version: 1,
       startedOn: today(),
       currentUnitIndex: 0,
-      reps: {},          // exerciseId -> times completed
+      reps: {},          // exerciseId -> times completed (legacy; kept for display)
+      sched: {},         // exerciseId -> SRS record (see srs.js)
       checkpoints: {},   // unitId -> {passed:true, date}
       sessions: [],      // {n, date, minutes, unitId, items:[exerciseId], done:[bool]}
       rotation: {},      // unitId -> counter, drives exercise variety
@@ -43,6 +44,33 @@
 
   function reps(exId) { return load().reps[exId] || 0; }
 
+  // ---- spaced repetition ----
+  var SRS = function () { return global.SRS; };
+
+  function sched(exId) {
+    var s = load();
+    if (!s.sched[exId]) {
+      // first look at an item that predates the scheduler: seed it from its reps
+      var r = s.reps[exId] || 0;
+      s.sched[exId] = r ? SRS().fromReps(r, today()) : SRS().blank();
+    }
+    return s.sched[exId];
+  }
+
+  function gradeExercise(exId, g) {
+    var s = load();
+    s.sched[exId] = SRS().grade(sched(exId), g || 'ok', today());
+    s.reps[exId] = (s.reps[exId] || 0) + 1;
+    save();
+    return s.sched[exId];
+  }
+
+  /* Which key/tempo variation this exercise should use next. */
+  function variantIndex(exId) { return sched(exId).variant || 0; }
+
+  function seen(exId) { return sched(exId).seen || 0; }
+  function lastGrade(exId) { return sched(exId).grade; }
+
   function bumpRep(exId) {
     var s = load();
     s.reps[exId] = (s.reps[exId] || 0) + 1;
@@ -70,12 +98,37 @@
 
   function isPassed(unitId) { return !!(load().checkpoints[unitId] || {}).passed; }
 
+  /* Move straight to any unit — for a new device, or for skipping material you
+     already have. markPrior records the earlier units as passed so the path
+     reads consistently; they are flagged `assumed` since you were not assessed
+     on them here. */
+  function setCurrentUnit(index, markPrior) {
+    var s = load();
+    var units = global.Curriculum.units;
+    index = Math.max(0, Math.min(units.length - 1, index));
+    if (markPrior) {
+      for (var i = 0; i < index; i++) {
+        if (!s.checkpoints[units[i].id]) {
+          s.checkpoints[units[i].id] = { passed: true, date: today(), assumed: true };
+        }
+      }
+    }
+    s.currentUnitIndex = index;
+    s.active = null;
+    save();
+  }
+
+  function isAssumed(unitId) { return !!(load().checkpoints[unitId] || {}).assumed; }
+
   function currentUnit() { return global.Curriculum.unitAt(load().currentUnitIndex); }
 
   function finishSession(sess) {
     var s = load();
     var doneItems = sess.items.filter(function (it) { return it.done; });
-    doneItems.forEach(function (it) { s.reps[it.id] = (s.reps[it.id] || 0) + 1; });
+    // Grades are recorded on the item as you go and only applied here, so a
+    // discarded session never touches the review schedule.
+    doneItems.forEach(function (it) { gradeExercise(it.id, it.grade || 'ok'); });
+    s = load();
     s.sessions.push({
       n: sess.n, date: today(), minutes: doneItems.reduce(function (a, it) { return a + it.minutes; }, 0),
       unitId: sess.unitId, items: doneItems.map(function (it) { return it.id; }),
@@ -134,7 +187,10 @@
   global.Store = {
     load: load, save: save, today: today, reps: reps, bumpRep: bumpRep,
     passCheckpoint: passCheckpoint, unpassCheckpoint: unpassCheckpoint, isPassed: isPassed,
-    currentUnit: currentUnit, finishSession: finishSession,
+    currentUnit: currentUnit, setCurrentUnit: setCurrentUnit, isAssumed: isAssumed,
+    sched: sched, gradeExercise: gradeExercise, variantIndex: variantIndex,
+    seen: seen, lastGrade: lastGrade,
+    finishSession: finishSession,
     setActive: setActive, getActive: getActive, clearActive: clearActive,
     sessionNumber: sessionNumber, totalMinutes: totalMinutes, streak: streak,
     daysPractised: daysPractised, setNote: setNote, getNote: getNote, setting: setting,

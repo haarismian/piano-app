@@ -215,7 +215,24 @@
     return [1, 3, 6, 8, 10].indexOf(((midi % 12) + 12) % 12) >= 0;
   }
 
+  /* Fill a lesson template against a key.
+       {{key}}   -> "Eb"
+       {{1}}     -> the triad on that degree      ("Eb", "Cm")
+       {{5:7}}   -> the seventh on that degree    ("Bb7", "Cm7")
+     Lets one exercise be practised in any key without rewriting its text, so a
+     repeat a month later is the same drill somewhere new. */
+  function fill(text, key) {
+    if (!text) return text;
+    return String(text).replace(/\{\{\s*([^}]+?)\s*\}\}/g, function (m, body) {
+      if (body.toLowerCase() === 'key') return key;
+      var mm = /^([1-7])(:7)?$/.exec(body);
+      if (!mm) return m;
+      return diatonic(key, parseInt(mm[1], 10), !!mm[2]);
+    });
+  }
+
   global.Theory = {
+    fill: fill,
     parseNote: parseNote, noteName: noteName, notePc: notePc, stepNote: stepNote,
     parseChord: parseChord, chordNotes: chordNotes, chordNoteNames: chordNoteNames,
     voice: voice, scaleNotes: scaleNotes, scaleNoteNames: scaleNoteNames,

@@ -78,62 +78,70 @@
   }
 
   /* Turn an exercise `show` spec into keyboards. */
-  function renderShow(show) {
+  /* Turn an exercise `show` spec into keyboards, in the key this repetition
+     is being practised in. Chord names may be templates ({{1}}, {{key}}). */
+  function renderShow(show, key) {
     if (!show) return '';
+    key = key || show.key || 'C';
     var boxes = [];
-    if (show.key && show.numbers) {
-      var syms = T.numbersToChords(show.numbers, show.key, show.sevenths);
+
+    if (show.numbers) {
+      var syms = T.numbersToChords(show.numbers, key, show.sevenths);
+      if (show.hand === 'L' || show.voicing) {
+        var sets0 = syms.map(function (sym) {
+          return T.voice(sym, {
+            voicing: show.voicing, octave: show.octave == null ? 3 : show.octave,
+            hand: show.hand || 'L'
+          });
+        });
+        var r0 = spanOf(sets0);
+        return '<div class="chordset">' + syms.map(function (sym, i) {
+          return chordBox(sym, sets0[i], T.chordNoteNames(sym).join(' '), r0);
+        }).join('') + '</div>';
+      }
       var voiced = voiceLead(syms, 4);
-      var nums = String(show.numbers).trim().split(/\s+/);
       var lhs = bassLine(syms, 3);
+      var nums = String(show.numbers).trim().split(/\s+/);
       var sets = syms.map(function (sym, i) { return lhs[i].concat(voiced[i]); });
       var range = spanOf(sets);
       sets.forEach(function (notes, i) {
         boxes.push(chordBox(nums[i] + '  ·  ' + syms[i], notes, T.chordNoteNames(syms[i]).join(' '), range));
       });
-      return '<div class="chordset wide">' + boxes.join('') + '</div>' +
-        '<p class="tiny muted">Key of ' + esc(show.key) + '. Blue = left hand, orange = right hand, voice-led.</p>';
+      return '<div class="chordset wide">' + boxes.join('') + '</div>';
     }
-    /* A written bass line under held chords: left hand takes the slash note,
-       right hand keeps a voice-led shape of the plain chord. */
+
     if (show.chords && show.bassline) {
-      var plain = show.chords.map(function (sym) {
+      var filled0 = show.chords.map(function (c) { return T.fill(c, key); });
+      var plain = filled0.map(function (sym) {
         var c = T.parseChord(sym);
         return c.root + ({ maj: '', min: 'm' }[c.quality] !== undefined
           ? { maj: '', min: 'm' }[c.quality] : c.quality);
       });
       var rh = voiceLead(plain, 4);
-      var bl = bassLine(show.chords, 3);
-      var bsets = show.chords.map(function (sym, i) { return bl[i].concat(rh[i]); });
+      var bl = bassLine(filled0, 3);
+      var bsets = filled0.map(function (sym, i) { return bl[i].concat(rh[i]); });
       var brange = spanOf(bsets);
-      var bbox = bsets.map(function (notes, i) {
-        return chordBox(show.chords[i], notes,
-          'bass ' + notes[0].name + '  ·  ' + T.chordNoteNames(plain[i]).join(' '), brange);
-      });
-      return '<div class="chordset wide">' + bbox.join('') + '</div>' +
-        '<p class="tiny muted">Blue = left hand (the bass line), orange = right hand.</p>';
+      return '<div class="chordset wide">' + bsets.map(function (notes, i) {
+        return chordBox(filled0[i], notes, 'bass ' + notes[0].name, brange);
+      }).join('') + '</div>';
     }
 
     if (show.chords) {
       var hand = show.hand || 'R';
       var oct = show.octave == null ? (hand === 'L' ? 3 : 4) : show.octave;
-      var sets2 = show.chords.map(function (sym, i) {
+      var filled = show.chords.map(function (c) { return T.fill(c, key); });
+      var sets2 = filled.map(function (sym, i) {
         if (show.voicing) return T.voice(sym, { voicing: show.voicing, octave: oct, hand: hand });
         if (show.inversions) return T.voice(sym, { inversion: show.inversions[i] || 0, octave: oct, hand: hand });
         return T.voice(sym, { octave: oct, hand: hand });
       });
       var range2 = spanOf(sets2);
-      show.chords.forEach(function (sym, i) {
-        var notes = sets2[i];
+      filled.forEach(function (sym, i) {
         var lbl = sym;
-        if (show.inversions) lbl += ' (' + ['root position', '1st inversion', '2nd inversion', '3rd inversion'][show.inversions[i] || 0] + ')';
-        boxes.push(chordBox(lbl, notes, T.chordNoteNames(sym).join(' '), range2));
+        if (show.inversions) lbl += ' · ' + ['root', '1st inv', '2nd inv', '3rd inv'][show.inversions[i] || 0];
+        boxes.push(chordBox(lbl, sets2[i], T.chordNoteNames(sym).join(' '), range2));
       });
-      var legend = hand === 'L' ? 'Left hand.' : 'Right hand.';
-      if (show.voicing === 'shell') legend += ' Shell: root and 7th only.';
-      if (show.voicing === 'shell37') legend += ' Shell: root, 3rd and 7th.';
-      if (show.voicing === 'open') legend += ' Spread over an octave.';
-      return '<div class="chordset">' + boxes.join('') + '</div><p class="tiny muted">' + legend + '</p>';
+      return '<div class="chordset">' + boxes.join('') + '</div>';
     }
     return '';
   }
@@ -150,7 +158,11 @@
         '<span class="tiny muted">Opens the click at the bottom of the screen.</span></div></div>';
     }
     if (tool === 'random-chord') {
-      var pool = (ex && ex.show && ex.show.chords) ? ex.show.chords : ['C', 'Dm', 'Em', 'F', 'G', 'Am'];
+      var k = (ex && exKey(ex)) || 'C';
+      var pool = (ex && ex.show && ex.show.numbers)
+        ? T.numbersToChords(ex.show.numbers, k, ex.show.sevenths)
+        : (ex && ex.show && ex.show.chords) ? ex.show.chords.map(function (c) { return T.fill(c, k); })
+        : T.numbersToChords('1 2 3 4 5 6', k);
       return '<div class="tool" data-tool="random-chord" data-pool="' + esc(pool.join(',')) + '">' +
         '<h4>Random chord caller</h4><div class="bigcall" data-out>—<small>press call</small></div>' +
         '<button class="mini" data-call>Call a chord</button></div>';
@@ -200,10 +212,24 @@
   }
 
   // ---------------------------------------------------------------- today
+  var showDetail = {};   // exerciseId -> detail panel forced open/closed
+
+  function exKey(ex, variant) {
+    return C.keyFor(ex, variant == null ? S.variantIndex(ex.id) : variant);
+  }
+
+  var KIND = {
+    warmup: ['warm', 'Warm-up'], new: ['core', 'New'],
+    review: ['rev', 'Review'], apply: ['app', 'Apply']
+  };
+  function kindPill(kind) {
+    var k = KIND[kind] || ['', kind];
+    return '<span class="pill ' + k[0] + '">' + esc(k[1]) + '</span>';
+  }
+
   function renderToday() {
     var active = S.getActive();
-    if (!active) return renderStart();
-    return renderSession(active);
+    return active ? renderSession(active) : renderStart();
   }
 
   function renderStart() {
@@ -212,85 +238,100 @@
     var ready = Sess.readiness(unit);
     var last = st.sessions[st.sessions.length - 1];
     var dur = S.setting('minutes') || 15;
-    var opts = [5, 10, 15, 20, 30, 45];
+    var due = dueCount();
 
     var html = '<div class="hero">' +
       '<div class="pill">Session ' + S.sessionNumber() + '</div>' +
-      '<h1 style="margin-top:9px">Unit ' + unit.number + ' — ' + esc(unit.title) + '</h1>' +
-      '<p class="sub">' + esc(unit.stageTitle) + ' · Step ' + unit.number + ' of ' + C.count + ' on the path</p>' +
-      '<p class="goal" style="margin-top:14px"><b>Objective:</b> ' + esc(unit.goal) + '</p>' +
+      '<h1>Unit ' + unit.number + ' — ' + esc(unit.title) + '</h1>' +
+      '<p class="sub">' + esc(unit.stageTitle) + ' · unit ' + unit.number + ' of ' + C.count +
+      (due ? ' · ' + due + ' item' + (due === 1 ? '' : 's') + ' due for review' : '') + '</p>' +
+      '<p class="goal"><b>Goal</b> ' + esc(unit.goal) + '</p>' +
+      '<details class="why"><summary>Why this matters</summary><p>' + esc(unit.why) + '</p></details>' +
       '<div class="durations">' +
-      opts.map(function (m) {
-        return '<button class="mini' + (m === dur ? ' on' : '') + '" data-dur="' + m + '">' + m + ' min</button>';
-      }).join('') + '</div>' +
-      '<button class="btn wide" data-start style="margin-top:12px">Start session ' + S.sessionNumber() + '</button>' +
+      [5, 10, 15, 20, 30, 45].map(function (m) {
+        return '<button class="mini' + (m === dur ? ' on' : '') + '" data-dur="' + m + '">' + m + '</button>';
+      }).join('') + '<span class="tiny muted">minutes</span></div>' +
+      '<button class="btn wide" data-start>Start session ' + S.sessionNumber() + '</button>' +
+      '<p class="tiny muted center">Somewhere else on the path? ' +
+      '<button class="linky" data-view="path">Pick any unit</button></p>' +
       '</div>';
 
-    html += '<div class="card"><div class="spread"><h3>Where you are</h3>' +
-      '<span class="tiny muted">' + Math.round(ready * 100) + '% of the reps for this unit</span></div>' +
+    html += '<div class="card"><div class="spread"><h3>Unit progress</h3>' +
+      '<span class="tiny muted">' + Math.round(ready * 100) + '% met</span></div>' +
       '<div class="meter"><i style="width:' + Math.round(ready * 100) + '%"></i></div>' +
-      '<p class="small muted" style="margin:0">' + esc(unit.why) + '</p>' +
-      (ready >= 0.7 ? '<p class="small" style="margin:10px 0 0"><b style="color:var(--accent)">You have put in the reps.</b> ' +
-        'Take the checkpoint on the Path tab when you are ready to move to unit ' + (unit.number + 1) + '.</p>' : '') +
+      (ready >= 1
+        ? '<p class="small">You have met everything here. Take the <b>' + esc(unit.checkpoint.title) +
+          '</b> checkpoint on the Path tab when you can do it for real.</p>'
+        : '<p class="small muted">Meet each exercise twice and the checkpoint opens. ' +
+          'Keeping it sharp is what the review schedule is for.</p>') +
       '</div>';
 
     if (last) {
-      html += '<div class="card small muted">Last session: #' + last.n + ' on ' + last.date +
-        ' · ' + last.minutes + ' min · ' + last.completed + ' of ' + last.planned + ' steps done.</div>';
+      html += '<p class="tiny muted center">Last: session ' + last.n + ' on ' + last.date +
+        ' · ' + last.minutes + ' min · ' + last.completed + '/' + last.planned + ' steps.</p>';
     } else {
       html += '<div class="card"><h3>How this works</h3>' +
-        '<p class="small muted" style="margin:8px 0 0">Pick a length and press start. You get a numbered list of steps ' +
-        'with exact instructions — do them in order and stop when you run out of time. ' +
-        'Every unit ends in a checkpoint; passing it unlocks the next unit. ' +
-        'Nothing is required daily, and the app picks up where you left off.</p></div>';
+        '<p class="small muted">Pick a length and press start. You get numbered steps with the chord ' +
+        'shapes drawn out — work down the list and stop when time is up. Rate each one and it comes ' +
+        'back on a spreading schedule, in a different key, rather than every session.</p></div>';
     }
     return html;
   }
 
-  function blockPill(block) {
-    var m = { 'Warm-up': 'warm', 'Core work': 'core', 'Review': 'rev', 'Apply it': 'app' };
-    return '<span class="pill ' + (m[block] || '') + '">' + esc(block) + '</span>';
+  function dueCount() {
+    var today = S.today(), n = 0, idx = S.load().currentUnitIndex;
+    for (var i = 0; i <= idx; i++) {
+      C.unitAt(i).exercises.forEach(function (e) {
+        if (S.seen(e.id) >= 1 && window.SRS.isDue(S.sched(e.id), today)) n++;
+      });
+    }
+    return n;
   }
 
   function renderSession(sess) {
     var doneCount = sess.items.filter(function (i) { return i.done; }).length;
     var pct = Math.round(doneCount / sess.items.length * 100);
     var unit = C.unit(sess.unitId);
+    var spans = {};
+    sess.items.forEach(function (i) { spans[i.fromUnit] = 1; });
+    var nUnits = Object.keys(spans).length;
 
-    var html = '<div class="hero">' +
+    var html = '<div class="hero compact">' +
       '<div class="spread"><div>' +
       '<div class="pill">Session ' + sess.n + '</div>' +
-      '<h1 style="margin-top:9px">Unit ' + sess.unitNumber + ' — ' + esc(sess.unitTitle) + '</h1>' +
-      '<p class="sub">' + sess.minutes + ' minutes · ' + sess.items.length + ' steps · ' +
-      doneCount + ' done</p></div>' +
-      '<button class="mini ghost" data-abandon title="Discard this session">Discard</button></div>' +
-      '<div class="meter" style="margin-top:12px"><i style="width:' + pct + '%"></i></div>' +
-      '</div>';
+      '<h1>Unit ' + sess.unitNumber + ' — ' + esc(sess.unitTitle) + '</h1>' +
+      '<p class="sub">' + sess.minutes + ' min · ' + sess.items.length + ' step' +
+      (sess.items.length === 1 ? '' : 's') + ' · ' + doneCount + ' done' +
+      (nUnits > 1 ? ' · spans ' + nUnits + ' units' : '') + '</p>' +
+      (sess.oneOff ? '<p class="tiny muted">One-off — your place stays at unit ' +
+        (S.load().currentUnitIndex + 1) + '.</p>' : '') +
+      '</div><button class="mini ghost" data-abandon>Discard</button></div>' +
+      '<div class="meter"><i style="width:' + pct + '%"></i></div></div>';
 
     if (doneCount === sess.items.length) {
       var ready = Sess.readiness(unit);
-      html += '<div class="card" style="border-color:var(--accent)">' +
+      html += '<div class="card done-card">' +
         '<h3>Session ' + sess.n + ' complete.</h3>' +
-        '<p class="small muted">' + sess.minutes + ' minutes logged against unit ' + sess.unitNumber + '. ' +
-        'You are now at ' + Math.round(ready * 100) + '% of the recommended reps for this unit.</p>' +
-        (ready >= 0.7
-          ? '<p class="small">Next: take the <b>' + esc(unit.checkpoint.title) + '</b> checkpoint on the Path tab.</p>'
-          : '<p class="small">Next: another session on this unit. Keep going until the reps meter is full, then take the checkpoint.</p>') +
-        '<button class="btn" data-finish style="margin-top:8px">Log it and finish</button></div>';
+        '<p class="small muted">' + sess.minutes + ' minutes logged. Unit ' + sess.unitNumber +
+        ' is ' + Math.round(ready * 100) + '% met.</p>' +
+        (ready >= 1
+          ? '<p class="small">Checkpoint <b>' + esc(unit.checkpoint.title) + '</b> is open on the Path tab.</p>'
+          : '') +
+        '<button class="btn" data-finish>Log it and finish</button></div>';
     }
 
-    var lastBlock = null;
     html += '<div class="steplist">';
     sess.items.forEach(function (it, i) {
       var ex = C.exercises[it.id];
-      if (it.block !== lastBlock) { html += '<div class="blockhead">' + esc(it.block) + '</div>'; lastBlock = it.block; }
       var isOpen = i === openStep;
-      var cls = 'step' + (isOpen ? ' current' : '') + (it.done ? ' done' : '');
-      html += '<div class="' + cls + '" data-step="' + i + '">' +
+      html += '<div class="step' + (isOpen ? ' current' : '') + (it.done ? ' done' : '') +
+        '" data-step="' + i + '">' +
         '<button class="stephead" data-open="' + i + '">' +
         '<span class="num">' + (it.done ? '&#10003;' : it.step) + '</span>' +
-        '<span class="stitle">' + esc(ex.title) + '</span>' +
-        '<span class="mins">' + it.minutes + ' min</span></button>';
+        '<span class="stitle">' + esc(ex.title) +
+        '<span class="smeta">' + (KIND[it.kind] || ['', ''])[1] +
+        ' · unit ' + ex.unitNumber + ' · ' + esc(exKey(ex, it.variant)) + '</span></span>' +
+        '<span class="mins">' + it.minutes + '\u2032</span></button>';
       if (isOpen) html += stepBody(it, ex, i, sess);
       html += '</div>';
     });
@@ -299,80 +340,165 @@
   }
 
   function stepBody(it, ex, i, sess) {
-    var reps = S.reps(ex.id);
-    var target = ex.reps || 8;
-    var body = '<div class="stepbody">' +
-      '<div class="row" style="margin-top:12px">' + blockPill(it.block) +
-      (ex.type === 'warmup' ? '' : '<span class="pill">' + esc(ex.type) + '</span>') +
-      (ex.unitNumber !== sess.unitNumber ? '<span class="pill">from unit ' + ex.unitNumber + '</span>' : '') +
-      '<span class="tiny muted">done ' + reps + ' / ' + target + ' times</span></div>';
+    var key = exKey(ex, it.variant);
+    var n = S.seen(ex.id);
+    var F = function (t) { return esc(T.fill(t, key)); };
+    var hasNotes = ex.steps.some(function (st) { return st.note; });
+    // Explanations show themselves while the exercise is new, then get out of
+    // the way. At the piano you want the cue, not the paragraph.
+    var detail = (showDetail[ex.id] === undefined) ? (n < 2) : showDetail[ex.id];
 
-    body += '<ol>' + ex.steps.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ol>';
-    body += '<div class="target"><b>Done when:</b> ' + esc(ex.target) + '</div>';
+    var body = '<div class="stepbody">';
 
-    if (ex.bpm) {
-      body += '<p class="small muted">Tempo: start at ' + ex.bpm.start + ' bpm, goal ' + ex.bpm.goal + ' bpm.</p>';
-    }
-    body += renderShow(ex.show);
+    body += '<div class="chips">' + kindPill(it.kind) +
+      '<span class="pill key">' + esc(key) + '</span>' +
+      (ex.bpm ? '<span class="pill">' + ex.bpm.start + '\u2013' + ex.bpm.goal + ' bpm</span>' : '') +
+      '<span class="tiny muted">' + (n === 0 ? 'first time' : ordinal(n + 1) + ' time') + '</span>' +
+      (hasNotes ? '<button class="linky right" data-detail="' + ex.id + '">' +
+        (detail ? 'Hide detail' : 'Show detail') + '</button>' : '') +
+      '</div>';
+
+    body += '<ol class="cues' + (detail ? ' withnotes' : '') + '">' +
+      ex.steps.map(function (st) {
+        return '<li>' + F(st.do) +
+          (detail && st.note ? '<span class="note">' + F(st.note) + '</span>' : '') + '</li>';
+      }).join('') + '</ol>';
+
+    body += '<p class="target"><b>Done when</b> ' + F(ex.target) + '</p>';
+    body += renderShow(ex.show, key);
     if (ex.tool) body += toolHTML(ex.tool, ex);
-    if (!ex.tool && ex.bpm) body += toolHTML('metronome', ex);
+    else if (ex.bpm) body += toolHTML('metronome', ex);
 
-    // timer
     var running = timer.stepId === it.id;
     var left = running ? timer.left : it.minutes * 60;
-    var pct = running && timer.total ? (timer.left / timer.total * 100) : 100;
-    body += '<div class="tool"><h4>Timer</h4>' +
-      '<div class="row"><span class="timer' + (left < 0 ? ' over' : '') + '" data-timer>' + fmtTime(left) + '</span>' +
+    var tpct = running && timer.total ? (timer.left / timer.total * 100) : 100;
+    body += '<div class="tool timerbox">' +
+      '<span class="timer' + (left < 0 ? ' over' : '') + '" data-timer>' + fmtTime(left) + '</span>' +
       '<button class="mini" data-timer-toggle="' + it.id + '" data-mins="' + it.minutes + '">' +
       (running && timer.id ? 'Pause' : 'Start ' + it.minutes + ' min') + '</button>' +
-      '<button class="mini ghost" data-timer-reset>Reset</button></div>' +
-      '<div class="timerbar"><i style="width:' + pct + '%"></i></div></div>';
+      '<button class="mini ghost" data-timer-reset>Reset</button>' +
+      '<div class="timerbar"><i style="width:' + tpct + '%"></i></div></div>';
 
-    var note = S.getNote(ex.id);
-    body += '<details style="margin-top:10px"><summary class="tiny muted" style="cursor:pointer">Notes on this exercise</summary>' +
-      '<textarea data-note="' + ex.id + '" placeholder="What went wrong, what tempo you reached, what to fix next time.">' +
-      esc(note) + '</textarea></details>';
+    body += '<details class="notes"><summary>Your notes</summary>' +
+      '<textarea data-note="' + ex.id + '" placeholder="Tempo reached, what to fix next time.">' +
+      esc(S.getNote(ex.id)) + '</textarea></details>';
 
-    body += '<div class="row" style="margin-top:14px">' +
-      (it.done
-        ? '<button class="btn secondary" data-undone="' + i + '">Mark not done</button>'
-        : '<button class="btn" data-done="' + i + '">Done &rarr; next step</button>') +
-      '<button class="mini ghost" data-skip="' + i + '">Skip for now</button></div>';
+    if (it.done) {
+      body += '<div class="gradebar"><span class="tiny muted">Marked ' +
+        esc(it.grade || 'ok') + '.</span>' +
+        '<button class="mini ghost" data-undone="' + i + '">Undo</button></div>';
+    } else {
+      body += '<div class="gradebar"><span class="tiny muted">How did that go?</span>' +
+        '<button class="mini g-shaky" data-grade="shaky" data-idx="' + i + '">Shaky</button>' +
+        '<button class="mini g-ok" data-grade="ok" data-idx="' + i + '">OK</button>' +
+        '<button class="mini g-solid" data-grade="solid" data-idx="' + i + '">Solid</button>' +
+        '<button class="linky" data-skip="' + i + '">Skip</button></div>' +
+        '<p class="tiny muted gradehint">Shaky brings it back next session; solid pushes it further out.</p>';
+    }
 
     body += '</div>';
     return body;
   }
 
+  function ordinal(n) {
+    var s = ['th', 'st', 'nd', 'rd'], v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  }
+
   function fmtTime(sec) {
     var neg = sec < 0; sec = Math.abs(sec);
-    var m = Math.floor(sec / 60), s = Math.floor(sec % 60);
-    return (neg ? '+' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+    var m = Math.floor(sec / 60), s2 = Math.floor(sec % 60);
+    return (neg ? '+' : '') + m + ':' + (s2 < 10 ? '0' : '') + s2;
   }
 
   // ---------------------------------------------------------------- path
+  var pathQuery = '';
+
+  /* Search across everything a unit is about — "flat keys", "shell", "rubato",
+     "Alberti", "Eb" — but weight where the words landed, so a unit whose title
+     is about flat keys beats one that merely says "feet flat" and "white keys"
+     somewhere in its instructions. */
+  var FIELD_WEIGHT = [
+    [function (u) { return u.title; }, 6],
+    [function (u) { return u.goal + ' ' + u.keys.join(' '); }, 3],
+    [function (u) { return u.why + ' ' + u.stageTitle + ' unit ' + u.number; }, 2],
+    [function (u) { return u.exercises.map(function (e) { return e.title; }).join(' '); }, 2],
+    [function (u) { return u.checkpoint.title + ' ' + u.checkpoint.criteria.join(' '); }, 1],
+    [function (u) { return u.exercises.map(function (e) { return e.steps.join(' '); }).join(' '); }, 0.5]
+  ];
+
+  function unitScore(u, q) {
+    if (!q) return 1;
+    var words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    var fields = FIELD_WEIGHT.map(function (f) { return [f[0](u).toLowerCase(), f[1]]; });
+    var total = 0;
+    for (var i = 0; i < words.length; i++) {
+      var best = 0;
+      for (var j = 0; j < fields.length; j++) {
+        if (fields[j][0].indexOf(words[i]) >= 0 && fields[j][1] > best) best = fields[j][1];
+      }
+      if (!best) return 0;          // every word must appear somewhere
+      total += best;
+    }
+    return total;
+  }
+
+  function unitMatches(u, q) { return unitScore(u, q) > 0; }
+
   function renderPath() {
     var st = S.load();
+    var q = pathQuery.trim();
+    var hits = C.units.filter(function (u) { return unitMatches(u, q); });
+
     var html = '<div class="card"><div class="spread"><div><h3>The path</h3>' +
-      '<p class="small muted" style="margin:4px 0 0">' + C.count + ' units, in order. ' +
-      'Each one ends in a checkpoint you assess yourself against. Passing it unlocks the next.</p></div>' +
+      '<p class="small muted" style="margin:4px 0 0">' + C.count + ' units, in order. Each ends in a ' +
+      'checkpoint you assess yourself against.</p></div>' +
       '<div style="text-align:right"><b style="font-size:22px">' + (st.currentUnitIndex + 1) + '</b>' +
       '<div class="tiny muted">of ' + C.count + '</div></div></div>' +
       '<div class="meter" style="margin-top:12px"><i style="width:' +
-      Math.round(st.currentUnitIndex / C.count * 100) + '%"></i></div></div>';
+      Math.round(st.currentUnitIndex / C.count * 100) + '%"></i></div>' +
+      '<p class="tiny muted" style="margin:10px 0 0">New device, or already know some of this? ' +
+      'Open any unit below and press <b>Start here</b> to move your place on the path. ' +
+      'You can practise any unit without moving it.</p>' +
+      '<input type="text" data-pathq value="' + esc(pathQuery) + '" ' +
+      'placeholder="Search all ' + C.count + ' units — try &quot;flat keys&quot;, &quot;rubato&quot;, &quot;shell&quot;" ' +
+      'style="width:100%;margin-top:12px">' +
+      (q ? '<p class="tiny muted" style="margin:8px 0 0">' + hits.length + ' of ' + C.count +
+        ' units match. <button class="mini ghost" data-pathclear>Clear</button></p>' : '') +
+      '</div>';
 
-    C.stages.forEach(function (stage) {
+    if (q && !hits.length) {
+      html += '<div class="card"><p class="small muted" style="margin:0">Nothing matches ' +
+        '&ldquo;' + esc(q) + '&rdquo;. Try a key name, a technique, or part of a unit title.</p></div>';
+      return html;
+    }
+
+    /* With a query, rank across the whole course; without one, keep the stage
+       grouping that shows the shape of the path. */
+    var groups = q
+      ? [{ title: 'Best matches', blurb: 'Ranked across all ' + C.count + ' units.',
+           units: hits.slice().sort(function (a, bb) { return unitScore(bb, q) - unitScore(a, q); }) }]
+      : C.stages;
+
+    groups.forEach(function (stage) {
+      var units = stage.units;
+      if (!units.length) return;
       html += '<div class="stage"><h2>' + esc(stage.title) + '</h2><p>' + esc(stage.blurb) + '</p>';
-      stage.units.forEach(function (u) {
+      units.forEach(function (u) {
         var passed = S.isPassed(u.id);
         var cur = u.index === st.currentUnitIndex;
-        var locked = u.index > st.currentUnitIndex;
-        var cls = 'unit' + (passed ? ' done' : '') + (cur ? ' cur' : '') + (locked ? ' locked' : '');
+        var ahead = u.index > st.currentUnitIndex;
+        var state = cur ? 'current' : passed ? (S.isAssumed(u.id) ? 'skipped' : 'passed')
+          : ahead ? 'ahead' : 'available';
+        var cls = 'unit' + (passed ? ' done' : '') + (cur ? ' cur' : '') + (ahead ? ' ahead' : '');
         html += '<div class="' + cls + '">' +
           '<button class="unithead" data-unit="' + u.id + '">' +
           '<span class="un">' + (passed ? '&#10003;' : u.number) + '</span>' +
-          '<span class="ut">' + esc(u.title) + '</span>' +
-          '<span class="tiny muted">' + (locked ? 'locked' : cur ? 'current' : 'passed') + '</span></button>';
-        if (openUnit === u.id) html += unitBody(u, locked, cur, passed);
+          '<span class="ut">' + esc(u.title) +
+          (q ? '<span class="tiny muted" style="display:block;font-weight:400">Unit ' + u.number +
+            ' &middot; ' + esc(u.stageTitle) + '</span>' : '') + '</span>' +
+          '<span class="tiny muted">' + state + '</span></button>';
+        if (openUnit === u.id) html += unitBody(u, cur, passed, ahead);
         html += '</div>';
       });
       html += '</div>';
@@ -380,32 +506,56 @@
     return html;
   }
 
-  function unitBody(u, locked, cur, passed) {
+  function unitBody(u, cur, passed, ahead) {
     var ready = Sess.readiness(u);
+    var mins = S.setting('minutes') || 15;
     var body = '<div class="unitbody">' +
       '<p class="goal"><b>Objective:</b> ' + esc(u.goal) + '</p>' +
       '<p class="why">' + esc(u.why) + '</p>' +
       '<p class="tiny muted">Working keys: ' + esc(u.keys.join(', ')) + '</p>' +
+
+      '<div class="row" style="margin:12px 0">' +
+      '<button class="' + (cur ? 'btn' : 'mini') + '" data-practice="' + u.index + '">' +
+      'Practise this unit &middot; ' + mins + ' min</button>' +
+      (cur ? '' : '<button class="mini" data-jump="' + u.index + '">Start here</button>') +
+      '</div>' +
+      (cur ? '' : '<p class="tiny muted" style="margin:-4px 0 10px">' +
+        '<b>Practise</b> runs a session on this unit and leaves your place alone. ' +
+        '<b>Start here</b> moves your place on the path to unit ' + u.number + '.</p>') +
+
+      '<p class="tiny muted" style="margin-bottom:4px">Tap an exercise to drill it on its own.</p>' +
       '<ul class="exlist">' + u.exercises.map(function (e) {
-        var r = S.reps(e.id), t = e.reps || 8;
-        return '<li><span class="pill ' + ({ warmup: 'warm', core: 'core', apply: 'app' }[e.role]) + '">' +
-          e.role + '</span><span>' + esc(e.title) + '</span>' +
-          '<span class="reps' + (r >= t ? ' hit' : '') + '">' + r + '/' + t + '</span></li>';
+        var n = S.seen(e.id), rec = S.sched(e.id), today = S.today();
+        var when = !n ? 'not met'
+          : window.SRS.isDue(rec, today) ? 'due'
+          : 'in ' + Math.max(1, window.SRS.daysBetween(today, rec.due)) + 'd';
+        return '<li><button class="exrow" data-drill="' + e.id + '">' +
+          '<span class="pill ' + ({ warmup: 'warm', core: 'core', apply: 'app' }[e.role]) + '">' +
+          e.role + '</span><span class="exname">' + esc(e.title) +
+          '<span class="smeta">' + (n ? n + '\u00d7 · ' + esc(C.keyFor(e, S.variantIndex(e.id))) : 'new') +
+          '</span></span>' +
+          '<span class="reps' + (when === 'due' ? ' hit' : '') + '">' + when + '</span></button></li>';
       }).join('') + '</ul>';
 
     body += '<div class="checkbox"><h4>Checkpoint — ' + esc(u.checkpoint.title) + '</h4>' +
       '<ul>' + u.checkpoint.criteria.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>' +
       '<div class="meter"><i style="width:' + Math.round(ready * 100) + '%"></i></div>' +
-      '<p class="tiny muted" style="margin:-6px 0 10px">Recommended reps: ' + Math.round(ready * 100) + '% complete.</p>';
+      '<p class="tiny muted" style="margin:-6px 0 10px">' + Math.round(ready * 100) +
+      '% of this unit met (each exercise done twice, not shaky).</p>';
 
     if (passed) {
-      body += '<button class="mini" data-unpass="' + u.id + '">Reopen this unit</button>';
+      body += '<div class="row">' +
+        (S.isAssumed(u.id)
+          ? '<span class="tiny muted">Marked done when you skipped ahead, not assessed here.</span>'
+          : '') +
+        '<button class="mini" data-unpass="' + u.id + '">Reopen this unit</button></div>';
     } else if (cur) {
       body += '<button class="btn" data-pass="' + u.id + '">I can do all of these — pass</button>' +
-        (ready < 0.5 ? '<p class="tiny muted" style="margin:8px 0 0">You have not done many reps yet. ' +
+        (ready < 0.5 ? '<p class="tiny muted" style="margin:8px 0 0">You have not met all of this yet. ' +
           'Pass it anyway if you genuinely meet the criteria.</p>' : '');
     } else {
-      body += '<p class="tiny muted">Finish unit ' + (S.load().currentUnitIndex + 1) + ' first.</p>';
+      body += '<p class="tiny muted" style="margin:0">You are on unit ' + (S.load().currentUnitIndex + 1) +
+        '. Press <b>Start here</b> above if this is really where you are.</p>';
     }
     body += '</div></div>';
     return body;
@@ -490,6 +640,29 @@
       stat(st.currentUnitIndex + 1 + '/' + C.count, 'unit') +
       '</div>';
 
+    // review schedule at a glance, so the spacing is visible rather than magic
+    var today = S.today(), buckets = { due: 0, soon: 0, resting: 0, unmet: 0 };
+    var longest = null;
+    for (var ui = 0; ui <= st.currentUnitIndex; ui++) {
+      C.unitAt(ui).exercises.forEach(function (e) {
+        var rec = S.sched(e.id);
+        if (!rec.seen) { buckets.unmet++; return; }
+        var d = window.SRS.daysBetween(today, rec.due);
+        if (d <= 0) buckets.due++;
+        else if (d <= 7) buckets.soon++;
+        else buckets.resting++;
+        if (!longest || rec.interval > longest.interval) longest = { id: e.id, interval: rec.interval };
+      });
+    }
+    html += '<div class="card"><h3>Review schedule</h3>' +
+      '<div class="grid" style="margin-top:10px">' +
+      stat(buckets.due, 'due now') + stat(buckets.soon, 'within a week') +
+      stat(buckets.resting, 'resting') + stat(buckets.unmet, 'not met yet') + '</div>' +
+      (longest ? '<p class="tiny muted" style="margin:10px 0 0">Longest interval: ' +
+        esc(C.exercises[longest.id].title) + ', every ' + Math.round(longest.interval) + ' days. ' +
+        'Rating an exercise <b>solid</b> pushes it further out; <b>shaky</b> brings it back next session.</p>' : '') +
+      '</div>';
+
     var passed = Object.keys(st.checkpoints).length;
     html += '<div class="card"><h3>Checkpoints passed</h3>' +
       '<p class="small muted">' + passed + ' of ' + C.count + '.</p>' +
@@ -566,7 +739,7 @@
 
   // ---------------------------------------------------------------- events
   document.addEventListener('click', function (ev) {
-    var t = ev.target.closest ? ev.target.closest('[data-view],[data-dur],[data-start],[data-open],[data-done],[data-undone],[data-skip],[data-abandon],[data-finish],[data-unit],[data-pass],[data-unpass],[data-play],[data-met],[data-call],[data-reveal],[data-timer-toggle],[data-timer-reset],[data-export],[data-import],[data-reset]') : null;
+    var t = ev.target.closest ? ev.target.closest('[data-view],[data-dur],[data-start],[data-open],[data-grade],[data-detail],[data-undone],[data-skip],[data-abandon],[data-finish],[data-unit],[data-pass],[data-unpass],[data-practice],[data-jump],[data-drill],[data-pathclear],[data-play],[data-met],[data-call],[data-reveal],[data-timer-toggle],[data-timer-reset],[data-export],[data-import],[data-reset]') : null;
     if (!t) return;
     var a;
 
@@ -585,9 +758,14 @@
       keepScroll(); render(); return;
     }
 
-    if ((a = t.getAttribute('data-done')) !== null && a !== undefined) {
-      var s = S.getActive(); s.items[parseInt(a, 10)].done = true; S.setActive(s);
-      var nxt = s.items.map(function (x, ix) { return x.done ? -1 : ix; }).filter(function (x) { return x >= 0; })[0];
+    if ((a = t.getAttribute('data-grade'))) {
+      var gi = parseInt(t.getAttribute('data-idx'), 10);
+      var gs = S.getActive();
+      gs.items[gi].done = true;
+      gs.items[gi].grade = a;
+      S.setActive(gs);
+      var nxt = gs.items.map(function (x, ix) { return x.done ? -1 : ix; })
+        .filter(function (x) { return x >= 0; })[0];
       openStep = (nxt === undefined ? -1 : nxt);
       stopTimer(); render();
       if (openStep >= 0) {
@@ -595,6 +773,13 @@
         if (node) node.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
       return;
+    }
+
+    if ((a = t.getAttribute('data-detail'))) {
+      var cur0 = showDetail[a];
+      var ex0 = C.exercises[a];
+      showDetail[a] = !(cur0 === undefined ? S.seen(ex0.id) < 2 : cur0);
+      keepScroll(); render(); return;
     }
 
     if ((a = t.getAttribute('data-undone')) !== null && a !== undefined) {
@@ -617,6 +802,37 @@
     }
 
     if ((a = t.getAttribute('data-unit'))) { openUnit = (openUnit === a ? null : a); keepScroll(); render(); return; }
+
+    if ((a = t.getAttribute('data-practice')) !== null && a !== undefined) {
+      var pIdx = parseInt(a, 10);
+      var ps = Sess.build(S.setting('minutes') || 15, pIdx);
+      S.setActive(ps); openStep = 0; openUnit = null; stopTimer(); view = 'today'; render();
+      return;
+    }
+
+    if ((a = t.getAttribute('data-drill'))) {
+      var ds = Sess.buildSingle(a);
+      if (ds) { S.setActive(ds); openStep = 0; openUnit = null; stopTimer(); view = 'today'; render(); }
+      return;
+    }
+
+    if ((a = t.getAttribute('data-jump')) !== null && a !== undefined) {
+      var jIdx = parseInt(a, 10);
+      var ju = C.unitAt(jIdx);
+      var behind = jIdx > S.load().currentUnitIndex;
+      var msg = 'Move your place on the path to unit ' + ju.number + ' — ' + ju.title + '?';
+      if (behind) {
+        msg += '\n\nUnits 1-' + ju.number + ' before it will be marked done so the path stays ' +
+          'consistent. Only do this for material you can already play.';
+      }
+      if (confirm(msg)) {
+        S.setCurrentUnit(jIdx, behind);
+        openUnit = null; stopTimer(); view = 'today'; render();
+      }
+      return;
+    }
+
+    if (t.hasAttribute('data-pathclear')) { pathQuery = ''; keepScroll(); render(); return; }
 
     if ((a = t.getAttribute('data-pass'))) {
       var uu = C.unit(a);
@@ -670,6 +886,16 @@
   });
   document.addEventListener('input', function (ev) {
     var t = ev.target;
+    if (t.hasAttribute && t.hasAttribute('data-pathq')) {
+      clearTimeout(window.__pq);
+      var val = t.value;
+      window.__pq = setTimeout(function () {
+        pathQuery = val; keepScroll(); render();
+        var box = $('[data-pathq]');
+        if (box) { box.focus(); box.setSelectionRange(val.length, val.length); }
+      }, 250);
+      return;
+    }
     if (t.getAttribute && t.getAttribute('data-note')) { S.setNote(t.getAttribute('data-note'), t.value); }
     if (t.getAttribute && t.getAttribute('data-ref') === 'numbers') {
       clearTimeout(window.__nt);
@@ -721,7 +947,7 @@
     if (/input|textarea|select/i.test(e.target.tagName)) return;
     if (e.key === 'm') { metbar.hidden ? showMet() : metToggle.click(); }
     if (e.key === 'n' && view === 'today') {
-      var b = $('[data-done]'); if (b) b.click();
+      var b = $('[data-grade="ok"]'); if (b) b.click();
     }
   });
 
