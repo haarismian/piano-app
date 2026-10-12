@@ -34,6 +34,23 @@
     });
   }
 
+  /* Play a run of notes one after another, for hearing a scale back. */
+  var seqTimers = [];
+  function stopSequence() {
+    seqTimers.forEach(clearTimeout); seqTimers = [];
+  }
+  function playSequence(midis, bpm, onNote) {
+    var a = ac(); if (!a) return;
+    stopSequence();
+    var step = 60 / (bpm || 92) / 2;          // eighth notes
+    var t = a.currentTime + 0.05;
+    midis.forEach(function (m, i) {
+      tone(m, t + i * step, step * 1.6, 0.17);
+      if (onNote) seqTimers.push(setTimeout(function () { onNote(i); }, (0.05 + i * step) * 1000));
+    });
+    if (onNote) seqTimers.push(setTimeout(function () { onNote(-1); }, (0.05 + midis.length * step) * 1000));
+  }
+
   // ---- metronome ----
   var met = { on: false, bpm: 80, timer: null, next: 0, beat: 0, beats: 4 };
   function click(at, accent) {
@@ -74,6 +91,7 @@
   }
 
   global.Audio2 = {
+    playSequence: playSequence, stopSequence: stopSequence,
     playNotes: playNotes, playChordVoicing: function (v, roll) {
       playNotes(v.map(function (n) { return n.midi; }), roll);
     },

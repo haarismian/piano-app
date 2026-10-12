@@ -561,6 +561,117 @@
     return body;
   }
 
+  // ---------------------------------------------------------------- scales
+  var scaleUI = { type: 'major', pc: 0, octaves: 1, hands: 'both' };
+
+  function renderScales() {
+    var Sc = window.Scales;
+    var types = Sc.types();
+    var type = types.filter(function (t) { return t.id === scaleUI.type; })[0] || types[0];
+    var sc = Sc.scale(scaleUI.pc, scaleUI.type, scaleUI.octaves, 4);
+    var covered = S.scaleCoverage(scaleUI.type);
+    var rec = S.scaleRec(scaleUI.type, scaleUI.pc);
+
+    // --- pick a scale type ---
+    var html = '<div class="card"><h3>Scales</h3>' +
+      '<div class="typegrid">' + types.map(function (t) {
+        return '<button class="mini' + (t.id === scaleUI.type ? ' on' : '') +
+          '" data-sctype="' + t.id + '">' + esc(t.name) + '</button>';
+      }).join('') + '</div>' +
+      '<p class="small muted" style="margin:10px 0 0">' + esc(type.blurb) + '</p></div>';
+
+    // --- pick a key, and see which you have covered ---
+    html += '<div class="card"><div class="spread"><h4 class="eyebrow">Key</h4>' +
+      '<span class="tiny muted">' + covered + ' of 12 practised</span></div>' +
+      '<div class="meter" style="margin:8px 0 12px"><i style="width:' +
+      Math.round(covered / 12 * 100) + '%"></i></div>' +
+      '<div class="keygrid">' + Sc.roots(scaleUI.type).map(function (r) {
+        var s2 = Sc.scale(r.pc, scaleUI.type, 1, 4);
+        var done = S.scaleRec(scaleUI.type, r.pc).count;
+        /* Only scales that actually carry a key signature get one here —
+           printing "0 sharps" against a blues scale would just be wrong. */
+        var sig = type.signature === 'none' ? ''
+          : s2.sharps ? s2.sharps + '\u266F'
+          : s2.flats ? s2.flats + '\u266D' : '\u2014';
+        return '<button class="keybtn' + (r.pc === scaleUI.pc ? ' on' : '') +
+          (done ? ' done' : '') + (sig ? '' : ' nosig') + '" data-sckey="' + r.pc + '">' +
+          '<b>' + esc(r.name) + '</b>' + (sig ? '<span>' + sig + '</span>' : '') +
+          (done ? '<i class="tick">\u2713</i>' : '') + '</button>';
+      }).join('') + '</div></div>';
+
+    // --- the scale itself ---
+    html += '<div class="card scalecard">' +
+      '<div class="spread"><div><h2 class="scalename">' + esc(sc.root) + ' ' + esc(type.name.toLowerCase()) + '</h2>' +
+      '<p class="tiny muted">' + keySigLabel(sc) + ' · ' + sc.degreeNames.length + ' notes' +
+      (rec.count ? ' · practised ' + rec.count + '\u00d7, last ' + rec.last : '') + '</p></div>' +
+      '<button class="mini" data-scplay>\u25B6 Hear it</button></div>' +
+
+      '<div class="degrees">' + sc.degreeNames.map(function (n, i) {
+        return '<span><i>' + (i + 1) + '</i>' + esc(n) + '</span>';
+      }).join('') + '</div>' +
+
+      '<div class="row scaleopts">' +
+      '<span class="seg">' +
+      ['both', 'right', 'left'].map(function (h) {
+        return '<button class="' + (scaleUI.hands === h ? 'on' : '') + '" data-schands="' + h + '">' +
+          (h === 'both' ? 'Both hands' : h === 'right' ? 'Right' : 'Left') + '</button>';
+      }).join('') + '</span>' +
+      '<span class="seg">' + [1, 2].map(function (o) {
+        return '<button class="' + (scaleUI.octaves === o ? 'on' : '') + '" data-scoct="' + o + '">' +
+          o + ' oct</button>';
+      }).join('') + '</span>' +
+      '<button class="mini ghost" data-met="80">Metronome</button>' +
+      '</div>';
+
+    // --- notation ---
+    var wantR = scaleUI.hands !== 'left', wantL = scaleUI.hands !== 'right';
+    if (wantR) html += staffBlock(sc, 'treble', 'Right hand', 4);
+    if (wantL) html += staffBlock(sc, 'bass', 'Left hand', 2);
+
+    if (!sc.hasFingering) {
+      html += '<p class="tiny muted">Five- and six-note scales have no one standard fingering — ' +
+        'keep the thumb off the black keys and group the notes however the shape falls under your hand.</p>';
+    }
+
+    /* Keyboard across a fixed two-octave window, so the keys keep piano-like
+       proportions instead of stretching when a scale spans few notes. */
+    var kb = sc.notes.map(function (n) {
+      return { midi: n.midi, name: n.name, hand: 'R' };
+    });
+    var lo = Math.floor(kb[0].midi / 12) * 12;
+    var hi = Math.max(lo + 23, kb[kb.length - 1].midi);
+    while ([1, 3, 6, 8, 10].indexOf(((hi % 12) + 12) % 12) >= 0) hi++;
+    html += '<div class="kbdwrap scalekbd">' + K.render(kb, { low: lo, high: hi }) + '</div>';
+
+    html += '<div class="row" style="margin-top:14px">' +
+      '<button class="btn" data-scdone>Mark practised</button>' +
+      '<span class="tiny muted">Logs this key so the grid above shows your coverage.</span></div>';
+
+    html += '</div>';
+    return html;
+  }
+
+  function keySigLabel(sc) {
+    if (sc.type.signature === 'none') return 'accidentals written in';
+    if (sc.sharps) return sc.sharps + ' sharp' + (sc.sharps === 1 ? '' : 's');
+    if (sc.flats) return sc.flats + ' flat' + (sc.flats === 1 ? '' : 's');
+    return 'no sharps or flats';
+  }
+
+  function staffBlock(sc, clef, label, octave) {
+    var Sc = window.Scales;
+    var s2 = Sc.scale(sc.pc, sc.type.id, scaleUI.octaves, octave);
+    var fingerKey = clef === 'bass' ? 'lh' : 'rh';
+    var notes = s2.notes.map(function (n) {
+      return { letter: n.letter, octave: n.octave, alter: n.alter, finger: n[fingerKey] };
+    });
+    return '<div class="staffblock"><h4 class="eyebrow">' + esc(label) + '</h4>' +
+      '<div class="staffwrap">' + window.Notation.render(notes, {
+        clef: clef, sharps: s2.sharps, flats: s2.flats,
+        title: sc.name + ', ' + label
+      }) + '</div></div>';
+  }
+
   // ---------------------------------------------------------------- reference
   var ref = { key: 'C', sevenths: false, root: 'C', quality: 'maj', numbers: '1 5 6 4' };
 
@@ -726,6 +837,7 @@
     main.innerHTML =
       view === 'today' ? renderToday() :
       view === 'path' ? renderPath() :
+      view === 'scales' ? renderScales() :
       view === 'ref' ? renderRef() : renderProgress();
     nextLine();
     $$('#tabs button').forEach(function (b) {
@@ -739,7 +851,7 @@
 
   // ---------------------------------------------------------------- events
   document.addEventListener('click', function (ev) {
-    var t = ev.target.closest ? ev.target.closest('[data-view],[data-dur],[data-start],[data-open],[data-grade],[data-detail],[data-undone],[data-skip],[data-abandon],[data-finish],[data-unit],[data-pass],[data-unpass],[data-practice],[data-jump],[data-drill],[data-pathclear],[data-play],[data-met],[data-call],[data-reveal],[data-timer-toggle],[data-timer-reset],[data-export],[data-import],[data-reset]') : null;
+    var t = ev.target.closest ? ev.target.closest('[data-view],[data-dur],[data-start],[data-open],[data-grade],[data-detail],[data-undone],[data-skip],[data-abandon],[data-finish],[data-unit],[data-pass],[data-unpass],[data-practice],[data-jump],[data-drill],[data-pathclear],[data-play],[data-met],[data-call],[data-reveal],[data-timer-toggle],[data-timer-reset],[data-export],[data-import],[data-reset],[data-sctype],[data-sckey],[data-schands],[data-scoct],[data-scplay],[data-scdone]') : null;
     if (!t) return;
     var a;
 
@@ -860,6 +972,23 @@
       keepScroll(); render(); return;
     }
     if (t.hasAttribute('data-timer-reset')) { stopTimer(); keepScroll(); render(); return; }
+
+    if ((a = t.getAttribute('data-sctype'))) { scaleUI.type = a; keepScroll(); render(); return; }
+    if ((a = t.getAttribute('data-sckey')) !== null && a !== undefined) {
+      scaleUI.pc = parseInt(a, 10); keepScroll(); render(); return;
+    }
+    if ((a = t.getAttribute('data-schands'))) { scaleUI.hands = a; keepScroll(); render(); return; }
+    if ((a = t.getAttribute('data-scoct'))) { scaleUI.octaves = parseInt(a, 10); keepScroll(); render(); return; }
+    if (t.hasAttribute('data-scplay')) {
+      var psc = window.Scales.scale(scaleUI.pc, scaleUI.type, scaleUI.octaves, 4);
+      var up = psc.notes.map(function (n) { return n.midi; });
+      var down = up.slice(0, -1).reverse();
+      A.playSequence(up.concat(down), 96);
+      return;
+    }
+    if (t.hasAttribute('data-scdone')) {
+      S.markScale(scaleUI.type, scaleUI.pc); keepScroll(); render(); return;
+    }
 
     if (t.hasAttribute('data-export')) {
       var ta = $('[data-io]'); ta.hidden = false; ta.value = S.exportJSON(); ta.select(); return;

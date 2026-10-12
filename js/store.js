@@ -15,6 +15,7 @@
       rotation: {},      // unitId -> counter, drives exercise variety
       active: null,      // the session currently in progress
       notes: {},         // exerciseId -> free text
+      scales: {},        // '<typeId>:<pc>' -> { count, last }
       settings: { minutes: 15, bpm: 80 }
     };
   }
@@ -167,6 +168,21 @@
     return Object.keys(dates).length;
   }
 
+  // ---- scale practice log ----
+  function scaleKey(typeId, pc) { return typeId + ':' + pc; }
+  function scaleRec(typeId, pc) { return load().scales[scaleKey(typeId, pc)] || { count: 0, last: null }; }
+  function markScale(typeId, pc) {
+    var s = load(), k = scaleKey(typeId, pc);
+    var r = s.scales[k] || { count: 0, last: null };
+    r.count++; r.last = today();
+    s.scales[k] = r; save(); return r;
+  }
+  function scaleCoverage(typeId) {
+    var n = 0;
+    for (var pc = 0; pc < 12; pc++) if (scaleRec(typeId, pc).count) n++;
+    return n;
+  }
+
   function setNote(exId, text) { load().notes[exId] = text; save(); }
   function getNote(exId) { return load().notes[exId] || ''; }
 
@@ -194,6 +210,7 @@
     setActive: setActive, getActive: getActive, clearActive: clearActive,
     sessionNumber: sessionNumber, totalMinutes: totalMinutes, streak: streak,
     daysPractised: daysPractised, setNote: setNote, getNote: getNote, setting: setting,
+    scaleRec: scaleRec, markScale: markScale, scaleCoverage: scaleCoverage,
     exportJSON: exportJSON, importJSON: importJSON, reset: reset
   };
 })(typeof window !== 'undefined' ? window : this);

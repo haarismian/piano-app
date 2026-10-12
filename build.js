@@ -9,7 +9,7 @@ const read = p => fs.readFileSync(path.join(root, p), 'utf8');
 
 const html = read('index.html');
 const css = read('css/style.css');
-const scripts = ['theory', 'keyboard', 'audio', 'srs', 'curriculum', 'store', 'session', 'app']
+const scripts = ['theory', 'keyboard', 'notation', 'audio', 'srs', 'scales', 'curriculum', 'store', 'session', 'app']
   .map(n => ({ name: n, src: read(`js/${n}.js`) }));
 
 // guard against a stray </script> inside a source file breaking the inline block

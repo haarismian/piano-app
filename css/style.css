@@ -236,3 +236,40 @@ textarea{width:100%;background:var(--bg3);color:var(--fg);border:1px solid var(-
   .hero{padding:16px}
   .stepbody{padding:0 12px 14px}
 }
+
+/* ---------- scales ---------- */
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--dimmer);margin:0}
+.typegrid{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.typegrid .mini{padding:7px 12px}
+
+.keygrid{display:grid;grid-template-columns:repeat(6,1fr);gap:7px}
+@media(max-width:620px){.keygrid{grid-template-columns:repeat(4,1fr)}}
+.keybtn{position:relative;background:var(--bg3);border:1px solid var(--line);border-radius:9px;
+  padding:9px 4px 7px;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.1}
+.keybtn b{font-size:16px;font-weight:700;letter-spacing:-.01em}
+.keybtn.nosig{padding:13px 4px}
+.keybtn span{font-size:11px;color:var(--dimmer);font-family:var(--mono)}
+.keybtn:hover{border-color:var(--dimmer)}
+.keybtn.done{border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.keybtn.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.keybtn.on span{color:var(--on-accent);opacity:.75}
+.keybtn .tick{position:absolute;top:3px;right:5px;font-size:9px;font-style:normal;color:var(--accent)}
+.keybtn.on .tick{color:var(--on-accent)}
+
+.scalecard .scalename{font-size:22px;letter-spacing:-.02em}
+.degrees{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 4px}
+.degrees span{background:var(--bg3);border:1px solid var(--line);border-radius:7px;padding:5px 11px;
+  font-weight:650;font-family:var(--mono);font-size:14px;text-align:center;line-height:1.25}
+.degrees span i{display:block;font-style:normal;font-size:10px;color:var(--dimmer);font-family:inherit}
+.scaleopts{margin:14px 0 4px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{background:var(--bg3);border:0;padding:7px 12px;font-size:13px;font-weight:600;color:var(--dim)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--accent);color:var(--on-accent)}
+
+.staffblock{margin:16px 0 6px}
+.staffwrap{overflow-x:auto;padding:2px 0}
+.staff{display:block;min-width:300px;max-width:640px;color:var(--fg)}
+.scalekbd{margin-top:14px}
+.scalekbd .kbd{max-width:560px}
+.scalekbd{margin-top:16px}
