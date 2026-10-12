@@ -83,6 +83,12 @@ starting over.
   - **Tap any exercise** to drill just that one thing.
 
   Pass a checkpoint here to advance; reopen a passed unit to go back and drill it.
+- **Scales** — all nine scale types in all twelve keys: major, natural /
+  harmonic / melodic minor, Dorian, Mixolydian, major and minor pentatonic,
+  and blues. Each one shows engraved notation on a treble and bass staff with
+  fingering numbers, a keyboard diagram, the notes by degree, one or two
+  octaves, and playback. Mark a key practised and the grid tracks which of the
+  twelve you have covered.
 - **Reference** — key explorer (every chord in a key, triads or sevenths), a
   progression transposed into all 12 keys, chord lookup with every inversion and
   shell/rootless voicings, plus the practice tools (random chord caller,
@@ -113,7 +119,9 @@ Blue keys are the left hand, orange the right.
 index.html         app shell
 css/style.css      styles (follows your system light/dark setting)
 js/theory.js       note spelling, chords, voicings, keys, transposition
+js/scales.js       scale spelling, key signatures, derived fingerings
 js/keyboard.js     SVG keyboard renderer
+js/notation.js     SVG music engraver (staff, clefs, key signatures, notes)
 js/audio.js        WebAudio chord playback and metronome
 js/curriculum.js   the syllabus: 6 stages, 25 units, 100 exercises
 js/store.js        progress in localStorage

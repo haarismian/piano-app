@@ -251,6 +251,43 @@ textarea{width:100%;background:var(--bg3);color:var(--fg);border:1px solid var(-
   .stepbody{padding:0 12px 14px}
 }
 
+/* ---------- scales ---------- */
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--dimmer);margin:0}
+.typegrid{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.typegrid .mini{padding:7px 12px}
+
+.keygrid{display:grid;grid-template-columns:repeat(6,1fr);gap:7px}
+@media(max-width:620px){.keygrid{grid-template-columns:repeat(4,1fr)}}
+.keybtn{position:relative;background:var(--bg3);border:1px solid var(--line);border-radius:9px;
+  padding:9px 4px 7px;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.1}
+.keybtn b{font-size:16px;font-weight:700;letter-spacing:-.01em}
+.keybtn.nosig{padding:13px 4px}
+.keybtn span{font-size:11px;color:var(--dimmer);font-family:var(--mono)}
+.keybtn:hover{border-color:var(--dimmer)}
+.keybtn.done{border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.keybtn.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.keybtn.on span{color:var(--on-accent);opacity:.75}
+.keybtn .tick{position:absolute;top:3px;right:5px;font-size:9px;font-style:normal;color:var(--accent)}
+.keybtn.on .tick{color:var(--on-accent)}
+
+.scalecard .scalename{font-size:22px;letter-spacing:-.02em}
+.degrees{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 4px}
+.degrees span{background:var(--bg3);border:1px solid var(--line);border-radius:7px;padding:5px 11px;
+  font-weight:650;font-family:var(--mono);font-size:14px;text-align:center;line-height:1.25}
+.degrees span i{display:block;font-style:normal;font-size:10px;color:var(--dimmer);font-family:inherit}
+.scaleopts{margin:14px 0 4px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{background:var(--bg3);border:0;padding:7px 12px;font-size:13px;font-weight:600;color:var(--dim)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--accent);color:var(--on-accent)}
+
+.staffblock{margin:16px 0 6px}
+.staffwrap{overflow-x:auto;padding:2px 0}
+.staff{display:block;min-width:300px;max-width:640px;color:var(--fg)}
+.scalekbd{margin-top:14px}
+.scalekbd .kbd{max-width:560px}
+.scalekbd{margin-top:16px}
+
 </style>
 </head>
 <body>
@@ -263,6 +300,7 @@ textarea{width:100%;background:var(--bg3);color:var(--fg);border:1px solid var(-
   <nav class="tabs" id="tabs">
     <button data-view="today" class="on">Today</button>
     <button data-view="path">Path</button>
+    <button data-view="scales">Scales</button>
     <button data-view="ref">Reference</button>
     <button data-view="progress">Progress</button>
   </nav>
@@ -618,6 +656,170 @@ textarea{width:100%;background:var(--bg3);color:var(--fg);border:1px solid var(-
 })(typeof window !== 'undefined' ? window : this);
 
 </script>
+<script>/* notation.js */
+/* notation.js — a small SVG music engraver, enough for scales.
+
+   Draws a staff with clef, key signature, noteheads with stems, ledger lines,
+   cautionary accidentals and fingering numbers. Everything is hand-drawn SVG
+   so the app keeps working offline and from file://. */
+(function (global) {
+  'use strict';
+
+  var SP = 10;          // one staff space
+  var HALF = SP / 2;    // one diatonic step
+  var LETTERS = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+
+  // Diatonic index of the note sitting on the bottom staff line.
+  var BOTTOM = { treble: 2 + 7 * 4, bass: 4 + 7 * 2 };   // E4 / G2
+
+  function idx(letter, octave) { return LETTERS[letter] + 7 * octave; }
+
+  function yFor(letter, octave, clef) {
+    return 4 * SP - (idx(letter, octave) - BOTTOM[clef]) * HALF;
+  }
+
+  // Key-signature glyph positions, in the conventional order and octaves.
+  var SHARP_ORDER = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
+  var FLAT_ORDER = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
+  var SHARP_OCT = { treble: { F: 5, C: 5, G: 5, D: 5, A: 4, E: 5, B: 4 },
+                    bass:   { F: 3, C: 3, G: 3, D: 3, A: 2, E: 3, B: 2 } };
+  var FLAT_OCT  = { treble: { B: 4, E: 5, A: 4, D: 5, G: 4, C: 5, F: 4 },
+                    bass:   { B: 2, E: 3, A: 2, D: 3, G: 2, C: 3, F: 2 } };
+
+  /* Clefs, drawn as stroked outlines rather than filled engraver glyphs — no
+     music font is needed, and a single-weight stroke suits the UI. Coordinates
+     are staff units: y=0 is the top line, y=40 the bottom, so the treble
+     spiral sits on G4 (y=30) and the bass dots straddle F3 (y=10). */
+  function clefPath(clef) {
+    var stroke = 'fill="none" stroke="currentColor" stroke-width="2.4" ' +
+      'stroke-linecap="round" stroke-linejoin="round"';
+    if (clef === 'treble') {
+      return '<path ' + stroke + ' d="' +
+        'M17 30' +
+        'C11 30 8 34 9 39' +
+        'C10 45 17 48 22 43' +
+        'C28 37 27 28 23 20' +
+        'C19 12 13 6 12 -1' +
+        'C11 -9 15 -15 19 -15' +
+        'C23 -15 25 -8 24 -1' +
+        'C23 9 19 18 19 30' +
+        'L19 45' +
+        'C19 51 15 54 11 52' +
+        'C8 50 9 46 12 46"/>';
+    }
+    return '<path ' + stroke + ' d="' +
+      'M7 15C7 8 13 5 18 8C23 11 23 19 19 25C15 31 10 35 4 37"/>' +
+      '<circle cx="26" cy="6" r="1.9" fill="currentColor"/>' +
+      '<circle cx="26" cy="14" r="1.9" fill="currentColor"/>';
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /* render(notes, opts) -> SVG string.
+       notes: [{ letter, octave, alter, finger }]
+       opts:  { clef, sharps, flats, title }
+     `sharps`/`flats` give the key signature; a note whose accidental differs
+     from what the signature implies gets one printed in front of it. */
+  function render(notes, opts) {
+    opts = opts || {};
+    var clef = opts.clef === 'bass' ? 'bass' : 'treble';
+    var sharps = opts.sharps || 0, flats = opts.flats || 0;
+
+    var padL = 8, clefW = clef === 'treble' ? 32 : 30;
+    var sigW = (sharps + flats) * 9 + ((sharps + flats) ? 8 : 4);
+    var noteStart = padL + clefW + sigW;
+    var gap = 22;
+    var width = noteStart + notes.length * gap + 14;
+
+    /* Measure first: a fingering row guessed at a fixed offset collides with
+       stems and ledger lines, so work out where the ink actually ends. */
+    var STEM = 32, inkTop = 0, inkBottom = 4 * SP;
+    notes.forEach(function (nt) {
+      var y = yFor(nt.letter, nt.octave, clef);
+      var up = y > 2 * SP;
+      inkTop = Math.min(inkTop, y - 6, up ? y - STEM : y);
+      inkBottom = Math.max(inkBottom, y + 6, up ? y : y + STEM);
+    });
+    var hasFingers = notes.some(function (nt) { return nt.finger; });
+    var fingerY = clef === 'bass' ? inkBottom + 16 : inkTop - 9;
+    var top = (hasFingers && clef !== 'bass' ? fingerY - 11 : inkTop) - 10;
+    var bottom = (hasFingers && clef === 'bass' ? fingerY : inkBottom) + 10;
+    var height = bottom - top;
+
+    var out = [];
+
+    // staff
+    for (var i = 0; i < 5; i++) {
+      out.push('<line x1="' + padL + '" y1="' + (i * SP) + '" x2="' + (width - 6) +
+        '" y2="' + (i * SP) + '" stroke="currentColor" stroke-width="1.1" opacity=".85"/>');
+    }
+    out.push('<g>' + clefPath(clef) + '</g>');
+
+    // key signature
+    var sigX = padL + clefW;
+    var sigNotes = sharps ? SHARP_ORDER.slice(0, sharps) : FLAT_ORDER.slice(0, flats);
+    var sigOct = sharps ? SHARP_OCT[clef] : FLAT_OCT[clef];
+    sigNotes.forEach(function (L, n) {
+      var y = yFor(L, sigOct[L], clef);
+      out.push(glyph(sharps ? '♯' : '♭', sigX + n * 9 + 4, y));
+    });
+
+    // what the signature already does to each letter
+    var implied = {};
+    sigNotes.forEach(function (L) { implied[L] = sharps ? 1 : -1; });
+
+    notes.forEach(function (nt, n) {
+      var x = noteStart + n * gap;
+      var y = yFor(nt.letter, nt.octave, clef);
+      var alter = nt.alter || 0;
+
+      // ledger lines
+      var ly;
+      for (ly = 4 * SP + SP; ly <= y + 0.1; ly += SP) out.push(ledger(x, ly));
+      for (ly = -SP; ly >= y - 0.1; ly -= SP) out.push(ledger(x, ly));
+
+      if (alter !== (implied[nt.letter] || 0)) {
+        out.push(glyph(alter === 1 ? '♯' : alter === -1 ? '♭' : '♮', x - 13, y));
+        implied[nt.letter] = alter;
+      }
+
+      // notehead
+      out.push('<ellipse cx="' + x + '" cy="' + y + '" rx="6.4" ry="4.7" ' +
+        'transform="rotate(-20 ' + x + ' ' + y + ')" fill="currentColor"/>');
+      // stem — up below the middle line, down above it
+      var up = y > 2 * SP;
+      out.push('<line x1="' + (x + (up ? 5.9 : -5.9)) + '" y1="' + y +
+        '" x2="' + (x + (up ? 5.9 : -5.9)) + '" y2="' + (y + (up ? -32 : 32)) +
+        '" stroke="currentColor" stroke-width="1.4"/>');
+
+      if (nt.finger) {
+        out.push('<text x="' + x + '" y="' + fingerY +
+          '" text-anchor="middle" style="font-size:11px" font-weight="700" ' +
+          'fill="currentColor" opacity=".55">' + esc(nt.finger) + '</text>');
+      }
+    });
+
+    return '<svg class="staff" viewBox="' + 0 + ' ' + top + ' ' + width + ' ' + height + '" ' +
+      'width="100%" preserveAspectRatio="xMinYMid meet" role="img" aria-label="' +
+      esc(opts.title || 'scale notation') + '">' + out.join('') + '</svg>';
+  }
+
+  function ledger(x, y) {
+    return '<line x1="' + (x - 10) + '" y1="' + y + '" x2="' + (x + 10) + '" y2="' + y +
+      '" stroke="currentColor" stroke-width="1.1"/>';
+  }
+
+  function glyph(ch, x, y) {
+    return '<text x="' + x + '" y="' + (y + 6.5) + '" text-anchor="middle" font-size="011" ' +
+      'style="font-size:19px" fill="currentColor" font-family="serif">' + ch + '</text>';
+  }
+
+  global.Notation = { render: render, yFor: yFor, SP: SP };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
 <script>/* audio.js */
 /* audio.js — a small WebAudio synth for chord playback, plus the metronome. */
 (function (global) {
@@ -653,6 +855,23 @@ textarea{width:100%;background:var(--bg3);color:var(--fg);border:1px solid var(-
     midis.forEach(function (m, i) {
       tone(m, t + (roll ? i * roll / 1000 : 0), 1.5, 0.16);
     });
+  }
+
+  /* Play a run of notes one after another, for hearing a scale back. */
+  var seqTimers = [];
+  function stopSequence() {
+    seqTimers.forEach(clearTimeout); seqTimers = [];
+  }
+  function playSequence(midis, bpm, onNote) {
+    var a = ac(); if (!a) return;
+    stopSequence();
+    var step = 60 / (bpm || 92) / 2;          // eighth notes
+    var t = a.currentTime + 0.05;
+    midis.forEach(function (m, i) {
+      tone(m, t + i * step, step * 1.6, 0.17);
+      if (onNote) seqTimers.push(setTimeout(function () { onNote(i); }, (0.05 + i * step) * 1000));
+    });
+    if (onNote) seqTimers.push(setTimeout(function () { onNote(-1); }, (0.05 + midis.length * step) * 1000));
   }
 
   // ---- metronome ----
@@ -695,6 +914,7 @@ textarea{width:100%;background:var(--bg3);color:var(--fg);border:1px solid var(-
   }
 
   global.Audio2 = {
+    playSequence: playSequence, stopSequence: stopSequence,
     playNotes: playNotes, playChordVoicing: function (v, roll) {
       playNotes(v.map(function (n) { return n.midi; }), roll);
     },
@@ -814,6 +1034,232 @@ textarea{width:100%;background:var(--bg3);color:var(--fg);border:1px solid var(-
     addDays: addDays, daysBetween: daysBetween, fmt: fmt,
     DEFAULT_EASE: DEFAULT_EASE
   };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>/* scales.js */
+/* scales.js — scale spelling, key signatures and fingerings.
+
+   Fingerings for seven-note scales are derived from the two rules every method
+   book encodes, rather than typed out per key:
+     - the thumb never lands on a black key
+     - the notes between thumbs fall in groups of three and four
+   Candidates that satisfy those are scored by the classical preference — the
+   right thumb wants the white key just after a black one, the left thumb the
+   white key just before one. See the test, which checks this reproduces the
+   standard fingering for all twelve major scales in both hands. */
+(function (global) {
+  'use strict';
+  var T = global.Theory;
+
+  // [semitones, letterSteps] from the root, as in Theory.FORMULAS
+  var TYPES = [
+    { id: 'major', name: 'Major', blurb: 'The one everything else is measured against.',
+      formula: [[0,0],[2,1],[4,2],[5,3],[7,4],[9,5],[11,6]], signature: 'self' },
+    { id: 'natural-minor', name: 'Natural minor', blurb: 'The relative minor scale — same notes as its major, different home.',
+      formula: [[0,0],[2,1],[3,2],[5,3],[7,4],[8,5],[10,6]], signature: 'relative' },
+    { id: 'harmonic-minor', name: 'Harmonic minor', blurb: 'Natural minor with a raised 7th, so the 5 chord pulls home.',
+      formula: [[0,0],[2,1],[3,2],[5,3],[7,4],[8,5],[11,6]], signature: 'relative' },
+    { id: 'melodic-minor', name: 'Melodic minor', blurb: 'Raised 6th and 7th going up. Jazz keeps them coming down too.',
+      formula: [[0,0],[2,1],[3,2],[5,3],[7,4],[9,5],[11,6]], signature: 'relative' },
+    { id: 'dorian', name: 'Dorian', blurb: 'Minor with a bright 6th. The default sound over a 2 chord.',
+      formula: [[0,0],[2,1],[3,2],[5,3],[7,4],[9,5],[10,6]], signature: 'none' },
+    { id: 'mixolydian', name: 'Mixolydian', blurb: 'Major with a flat 7th. What you play over a dominant chord.',
+      formula: [[0,0],[2,1],[4,2],[5,3],[7,4],[9,5],[10,6]], signature: 'none' },
+    { id: 'major-pentatonic', name: 'Major pentatonic', blurb: 'Five notes, none of them wrong. Safe over major harmony.',
+      formula: [[0,0],[2,1],[4,2],[7,4],[9,5]], signature: 'none' },
+    { id: 'minor-pentatonic', name: 'Minor pentatonic', blurb: 'The backbone of blues, soul and rock fills.',
+      formula: [[0,0],[3,2],[5,3],[7,4],[10,6]], signature: 'none' },
+    /* The blue note is a flat 5 where that spells cleanly (C blues: Gb) and a
+       sharp 4 where the flat 5 would need a double flat (Eb blues takes A
+       natural, not B double-flat). The third entry is that fallback. */
+    { id: 'blues', name: 'Blues', blurb: 'Minor pentatonic plus the flat 5 — the note that does the work.',
+      formula: [[0,0],[3,2],[5,3],[6,4,3],[7,4],[10,6]], signature: 'none' }
+  ];
+
+  // Candidate spellings for each pitch class, best-first.
+  var SPELLINGS = [
+    ['C'], ['Db', 'C#'], ['D'], ['Eb', 'D#'], ['E'], ['F'],
+    ['Gb', 'F#'], ['G'], ['Ab', 'G#'], ['A'], ['Bb', 'A#'], ['B']
+  ];
+
+  function isBlackPc(pc) { return [1, 3, 6, 8, 10].indexOf(((pc % 12) + 12) % 12) >= 0; }
+
+  /* Spell the scale on `root`, returning notes with letter / alter / degree. */
+  function spell(root, type) {
+    var r = T.parseNote(root);
+    return type.formula.map(function (iv, i) {
+      var n = T.stepNote(r, iv[0], iv[1]);
+      /* Take the alternative letter when the first needs a double accidental,
+         and also for Fb and Cb — both are white keys written as a flat, which
+         reads badly in a scale you are sight-reading. */
+      var awkward = n.alter === -1 && (n.letter === 'F' || n.letter === 'C');
+      if ((Math.abs(n.alter) > 1 || awkward) && iv.length > 2) n = T.stepNote(r, iv[0], iv[2]);
+      return { letter: n.letter, alter: n.alter, name: T.noteName(n),
+               pc: T.notePc(n), degreeStep: iv[1], semis: iv[0], index: i };
+    });
+  }
+
+  /* Pick the spelling of a pitch class that needs the fewest accidentals and
+     no double sharps or flats. */
+  function rootFor(pc, type) {
+    var best = null;
+    SPELLINGS[((pc % 12) + 12) % 12].forEach(function (cand) {
+      var notes = spell(cand, type);
+      var doubles = notes.filter(function (n) { return Math.abs(n.alter) > 1; }).length;
+      var accs = notes.filter(function (n) { return n.alter !== 0; }).length;
+      var score = doubles * 100 + accs;
+      if (!best || score < best.score) best = { root: cand, score: score };
+    });
+    return best.root;
+  }
+
+  /* Key signature: a major scale uses its own, the minor forms use the
+     relative major's, and modal or gapped scales print accidentals instead. */
+  function signature(root, type) {
+    if (type.signature === 'none') return { sharps: 0, flats: 0 };
+    var key = root;
+    if (type.signature === 'relative') {
+      var rel = T.stepNote(T.parseNote(root), 3, 2);   // up a minor third
+      key = T.noteName(rel);
+    }
+    var notes = spell(key, TYPES[0]);
+    var sharps = notes.filter(function (n) { return n.alter > 0; }).length;
+    var flats = notes.filter(function (n) { return n.alter < 0; }).length;
+    return { sharps: sharps, flats: flats };
+  }
+
+  // ---------------------------------------------------------------- fingering
+  /* Thumb sets are indices into the eight ascending notes (tonic to octave).
+     finger(i) counts up from the previous thumb for the right hand, and down
+     to the next thumb for the left. */
+  function rhFingers(thumbs) {
+    var f = [];
+    for (var i = 0; i <= 7; i++) {
+      var prev = -99;
+      thumbs.forEach(function (t) {
+        if (t <= i && t > prev) prev = t;
+        if (t - 7 <= i && t - 7 > prev) prev = t - 7;
+      });
+      f.push(1 + (i - prev));
+    }
+    return f;
+  }
+  function lhFingers(thumbs) {
+    var f = [];
+    for (var i = 0; i <= 7; i++) {
+      var next = 99;
+      thumbs.forEach(function (t) {
+        if (t >= i && t < next) next = t;
+        if (t + 7 >= i && t + 7 < next) next = t + 7;
+      });
+      f.push(1 + (next - i));
+    }
+    return f;
+  }
+
+  function fingering(notes) {
+    if (notes.length !== 7) return null;           // only heptatonic scales
+    var pcs = notes.map(function (n) { return n.pc; });
+    function white(i) { return !isBlackPc(pcs[i % 7]); }
+    // white key directly after / before a black one, within the scale
+    function afterBlack(i) { return isBlackPc(pcs[(i + 6) % 7]); }
+    function beforeBlack(i) { return isBlackPc(pcs[(i + 1) % 7]); }
+
+    var rh = null, lh = null;
+    for (var t = 0; t <= 6; t++) {
+      for (var gi = 0; gi < 2; gi++) {
+        var g = gi ? 4 : 3, t2 = t + g;
+        if (t2 > 6) continue;
+        if (!white(t) || !white(t2)) continue;
+        /* Mirror of the left-hand rule: when the tonic is a white key the right
+           thumb starts on it, and that outranks the black-key preference. */
+        var score = (t === 0 ? 10 : 0) +
+                    (afterBlack(t) ? 2 : 0) + (afterBlack(t2) ? 2 : 0) +
+                    (g === 3 ? 0.5 : 0);
+        if (!rh || score > rh.score) rh = { score: score, thumbs: [t, t2] };
+      }
+    }
+    for (var a = 0; a <= 4; a++) {
+      for (var gj = 0; gj < 2; gj++) {
+        var gg = gj ? 4 : 3, bb = a + gg;
+        if (bb > 7) continue;
+        if (!white(a) || !white(bb)) continue;
+        /* The left thumb wants the tonic itself when the tonic is a white key;
+           that outranks everything. Only when the tonic is black does the
+           "white key just before a black one" preference decide. */
+        var s2 = (bb === 7 ? 10 : 0) +
+                 (beforeBlack(a) ? 2 : 0) + (beforeBlack(bb) ? 2 : 0) + a * 0.3;
+        if (!lh || s2 > lh.score) lh = { score: s2, thumbs: [a, bb] };
+      }
+    }
+    if (!rh || !lh) return null;
+    return { rh: rhFingers(rh.thumbs), lh: lhFingers(lh.thumbs) };
+  }
+
+  // ---------------------------------------------------------------- assembly
+  var LET = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+  var LETTER_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+
+  /* Pitch of a spelled note. This has to come from the letter plus its
+     accidental, not from the wrapped pitch class: Cb5 sounds B4, so deriving
+     it from pitch class 11 would place it an octave too high. */
+  function midiOf(letter, alter, octave) {
+    return 12 * (octave + 1) + LETTER_PC[letter] + (alter || 0);
+  }
+
+  /* scale(pc, typeId, octaves, baseOctave) -> everything the UI needs. */
+  function scale(pc, typeId, octaves, baseOctave) {
+    var type = TYPES.filter(function (x) { return x.id === typeId; })[0] || TYPES[0];
+    var root = rootFor(pc, type);
+    var base = spell(root, type);
+    var sig = signature(root, type);
+    var fng = fingering(base);
+    octaves = octaves || 1;
+    var oct = baseOctave == null ? 4 : baseOctave;
+
+    // Walk the letters; the octave ticks over whenever the letter crosses C.
+    var out = [], prevLetter = LET.indexOf(base[0].letter);
+    for (var o = 0; o < octaves; o++) {
+      base.forEach(function (n, i) {
+        var li = LET.indexOf(n.letter);
+        if (!(o === 0 && i === 0) && li < prevLetter) oct++;
+        prevLetter = li;
+        out.push({ letter: n.letter, alter: n.alter, octave: oct, name: n.name,
+                   degree: i + 1, midi: midiOf(n.letter, n.alter, oct) });
+      });
+    }
+    var topLi = LET.indexOf(base[0].letter);
+    if (topLi < prevLetter) oct++;
+    out.push({ letter: base[0].letter, alter: base[0].alter, octave: oct, name: base[0].name,
+               degree: 1, midi: midiOf(base[0].letter, base[0].alter, oct) });
+
+    if (fng) {
+      var n7 = base.length;
+      out.forEach(function (nt, i) {
+        var last = i === out.length - 1;
+        nt.rh = last ? fng.rh[7] : fng.rh[i % n7];
+        nt.lh = last ? fng.lh[7] : fng.lh[i % n7];
+      });
+    }
+
+    return {
+      type: type, root: root, pc: pc, notes: out,
+      sharps: sig.sharps, flats: sig.flats,
+      degreeNames: base.map(function (n) { return n.name; }),
+      hasFingering: !!fng,
+      name: root + ' ' + type.name.toLowerCase()
+    };
+  }
+
+  function types() { return TYPES; }
+  function roots(typeId) {
+    var type = TYPES.filter(function (x) { return x.id === typeId; })[0] || TYPES[0];
+    var order = [0, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10, 5];   // circle of fifths
+    return order.map(function (pc) { return { pc: pc, name: rootFor(pc, type) }; });
+  }
+
+  global.Scales = { types: types, roots: roots, scale: scale, rootFor: rootFor, fingering: fingering, spell: spell };
 })(typeof window !== 'undefined' ? window : this);
 
 </script>
@@ -2228,6 +2674,7 @@ textarea{width:100%;background:var(--bg3);color:var(--fg);border:1px solid var(-
       rotation: {},      // unitId -> counter, drives exercise variety
       active: null,      // the session currently in progress
       notes: {},         // exerciseId -> free text
+      scales: {},        // '<typeId>:<pc>' -> { count, last }
       settings: { minutes: 15, bpm: 80 }
     };
   }
@@ -2380,6 +2827,21 @@ textarea{width:100%;background:var(--bg3);color:var(--fg);border:1px solid var(-
     return Object.keys(dates).length;
   }
 
+  // ---- scale practice log ----
+  function scaleKey(typeId, pc) { return typeId + ':' + pc; }
+  function scaleRec(typeId, pc) { return load().scales[scaleKey(typeId, pc)] || { count: 0, last: null }; }
+  function markScale(typeId, pc) {
+    var s = load(), k = scaleKey(typeId, pc);
+    var r = s.scales[k] || { count: 0, last: null };
+    r.count++; r.last = today();
+    s.scales[k] = r; save(); return r;
+  }
+  function scaleCoverage(typeId) {
+    var n = 0;
+    for (var pc = 0; pc < 12; pc++) if (scaleRec(typeId, pc).count) n++;
+    return n;
+  }
+
   function setNote(exId, text) { load().notes[exId] = text; save(); }
   function getNote(exId) { return load().notes[exId] || ''; }
 
@@ -2407,6 +2869,7 @@ textarea{width:100%;background:var(--bg3);color:var(--fg);border:1px solid var(-
     setActive: setActive, getActive: getActive, clearActive: clearActive,
     sessionNumber: sessionNumber, totalMinutes: totalMinutes, streak: streak,
     daysPractised: daysPractised, setNote: setNote, getNote: getNote, setting: setting,
+    scaleRec: scaleRec, markScale: markScale, scaleCoverage: scaleCoverage,
     exportJSON: exportJSON, importJSON: importJSON, reset: reset
   };
 })(typeof window !== 'undefined' ? window : this);
@@ -3198,6 +3661,117 @@ textarea{width:100%;background:var(--bg3);color:var(--fg);border:1px solid var(-
     return body;
   }
 
+  // ---------------------------------------------------------------- scales
+  var scaleUI = { type: 'major', pc: 0, octaves: 1, hands: 'both' };
+
+  function renderScales() {
+    var Sc = window.Scales;
+    var types = Sc.types();
+    var type = types.filter(function (t) { return t.id === scaleUI.type; })[0] || types[0];
+    var sc = Sc.scale(scaleUI.pc, scaleUI.type, scaleUI.octaves, 4);
+    var covered = S.scaleCoverage(scaleUI.type);
+    var rec = S.scaleRec(scaleUI.type, scaleUI.pc);
+
+    // --- pick a scale type ---
+    var html = '<div class="card"><h3>Scales</h3>' +
+      '<div class="typegrid">' + types.map(function (t) {
+        return '<button class="mini' + (t.id === scaleUI.type ? ' on' : '') +
+          '" data-sctype="' + t.id + '">' + esc(t.name) + '</button>';
+      }).join('') + '</div>' +
+      '<p class="small muted" style="margin:10px 0 0">' + esc(type.blurb) + '</p></div>';
+
+    // --- pick a key, and see which you have covered ---
+    html += '<div class="card"><div class="spread"><h4 class="eyebrow">Key</h4>' +
+      '<span class="tiny muted">' + covered + ' of 12 practised</span></div>' +
+      '<div class="meter" style="margin:8px 0 12px"><i style="width:' +
+      Math.round(covered / 12 * 100) + '%"></i></div>' +
+      '<div class="keygrid">' + Sc.roots(scaleUI.type).map(function (r) {
+        var s2 = Sc.scale(r.pc, scaleUI.type, 1, 4);
+        var done = S.scaleRec(scaleUI.type, r.pc).count;
+        /* Only scales that actually carry a key signature get one here —
+           printing "0 sharps" against a blues scale would just be wrong. */
+        var sig = type.signature === 'none' ? ''
+          : s2.sharps ? s2.sharps + '\u266F'
+          : s2.flats ? s2.flats + '\u266D' : '\u2014';
+        return '<button class="keybtn' + (r.pc === scaleUI.pc ? ' on' : '') +
+          (done ? ' done' : '') + (sig ? '' : ' nosig') + '" data-sckey="' + r.pc + '">' +
+          '<b>' + esc(r.name) + '</b>' + (sig ? '<span>' + sig + '</span>' : '') +
+          (done ? '<i class="tick">\u2713</i>' : '') + '</button>';
+      }).join('') + '</div></div>';
+
+    // --- the scale itself ---
+    html += '<div class="card scalecard">' +
+      '<div class="spread"><div><h2 class="scalename">' + esc(sc.root) + ' ' + esc(type.name.toLowerCase()) + '</h2>' +
+      '<p class="tiny muted">' + keySigLabel(sc) + ' · ' + sc.degreeNames.length + ' notes' +
+      (rec.count ? ' · practised ' + rec.count + '\u00d7, last ' + rec.last : '') + '</p></div>' +
+      '<button class="mini" data-scplay>\u25B6 Hear it</button></div>' +
+
+      '<div class="degrees">' + sc.degreeNames.map(function (n, i) {
+        return '<span><i>' + (i + 1) + '</i>' + esc(n) + '</span>';
+      }).join('') + '</div>' +
+
+      '<div class="row scaleopts">' +
+      '<span class="seg">' +
+      ['both', 'right', 'left'].map(function (h) {
+        return '<button class="' + (scaleUI.hands === h ? 'on' : '') + '" data-schands="' + h + '">' +
+          (h === 'both' ? 'Both hands' : h === 'right' ? 'Right' : 'Left') + '</button>';
+      }).join('') + '</span>' +
+      '<span class="seg">' + [1, 2].map(function (o) {
+        return '<button class="' + (scaleUI.octaves === o ? 'on' : '') + '" data-scoct="' + o + '">' +
+          o + ' oct</button>';
+      }).join('') + '</span>' +
+      '<button class="mini ghost" data-met="80">Metronome</button>' +
+      '</div>';
+
+    // --- notation ---
+    var wantR = scaleUI.hands !== 'left', wantL = scaleUI.hands !== 'right';
+    if (wantR) html += staffBlock(sc, 'treble', 'Right hand', 4);
+    if (wantL) html += staffBlock(sc, 'bass', 'Left hand', 2);
+
+    if (!sc.hasFingering) {
+      html += '<p class="tiny muted">Five- and six-note scales have no one standard fingering — ' +
+        'keep the thumb off the black keys and group the notes however the shape falls under your hand.</p>';
+    }
+
+    /* Keyboard across a fixed two-octave window, so the keys keep piano-like
+       proportions instead of stretching when a scale spans few notes. */
+    var kb = sc.notes.map(function (n) {
+      return { midi: n.midi, name: n.name, hand: 'R' };
+    });
+    var lo = Math.floor(kb[0].midi / 12) * 12;
+    var hi = Math.max(lo + 23, kb[kb.length - 1].midi);
+    while ([1, 3, 6, 8, 10].indexOf(((hi % 12) + 12) % 12) >= 0) hi++;
+    html += '<div class="kbdwrap scalekbd">' + K.render(kb, { low: lo, high: hi }) + '</div>';
+
+    html += '<div class="row" style="margin-top:14px">' +
+      '<button class="btn" data-scdone>Mark practised</button>' +
+      '<span class="tiny muted">Logs this key so the grid above shows your coverage.</span></div>';
+
+    html += '</div>';
+    return html;
+  }
+
+  function keySigLabel(sc) {
+    if (sc.type.signature === 'none') return 'accidentals written in';
+    if (sc.sharps) return sc.sharps + ' sharp' + (sc.sharps === 1 ? '' : 's');
+    if (sc.flats) return sc.flats + ' flat' + (sc.flats === 1 ? '' : 's');
+    return 'no sharps or flats';
+  }
+
+  function staffBlock(sc, clef, label, octave) {
+    var Sc = window.Scales;
+    var s2 = Sc.scale(sc.pc, sc.type.id, scaleUI.octaves, octave);
+    var fingerKey = clef === 'bass' ? 'lh' : 'rh';
+    var notes = s2.notes.map(function (n) {
+      return { letter: n.letter, octave: n.octave, alter: n.alter, finger: n[fingerKey] };
+    });
+    return '<div class="staffblock"><h4 class="eyebrow">' + esc(label) + '</h4>' +
+      '<div class="staffwrap">' + window.Notation.render(notes, {
+        clef: clef, sharps: s2.sharps, flats: s2.flats,
+        title: sc.name + ', ' + label
+      }) + '</div></div>';
+  }
+
   // ---------------------------------------------------------------- reference
   var ref = { key: 'C', sevenths: false, root: 'C', quality: 'maj', numbers: '1 5 6 4' };
 
@@ -3363,6 +3937,7 @@ textarea{width:100%;background:var(--bg3);color:var(--fg);border:1px solid var(-
     main.innerHTML =
       view === 'today' ? renderToday() :
       view === 'path' ? renderPath() :
+      view === 'scales' ? renderScales() :
       view === 'ref' ? renderRef() : renderProgress();
     nextLine();
     $$('#tabs button').forEach(function (b) {
@@ -3376,7 +3951,7 @@ textarea{width:100%;background:var(--bg3);color:var(--fg);border:1px solid var(-
 
   // ---------------------------------------------------------------- events
   document.addEventListener('click', function (ev) {
-    var t = ev.target.closest ? ev.target.closest('[data-view],[data-dur],[data-start],[data-open],[data-grade],[data-detail],[data-undone],[data-skip],[data-abandon],[data-finish],[data-unit],[data-pass],[data-unpass],[data-practice],[data-jump],[data-drill],[data-pathclear],[data-play],[data-met],[data-call],[data-reveal],[data-timer-toggle],[data-timer-reset],[data-export],[data-import],[data-reset]') : null;
+    var t = ev.target.closest ? ev.target.closest('[data-view],[data-dur],[data-start],[data-open],[data-grade],[data-detail],[data-undone],[data-skip],[data-abandon],[data-finish],[data-unit],[data-pass],[data-unpass],[data-practice],[data-jump],[data-drill],[data-pathclear],[data-play],[data-met],[data-call],[data-reveal],[data-timer-toggle],[data-timer-reset],[data-export],[data-import],[data-reset],[data-sctype],[data-sckey],[data-schands],[data-scoct],[data-scplay],[data-scdone]') : null;
     if (!t) return;
     var a;
 
@@ -3497,6 +4072,23 @@ textarea{width:100%;background:var(--bg3);color:var(--fg);border:1px solid var(-
       keepScroll(); render(); return;
     }
     if (t.hasAttribute('data-timer-reset')) { stopTimer(); keepScroll(); render(); return; }
+
+    if ((a = t.getAttribute('data-sctype'))) { scaleUI.type = a; keepScroll(); render(); return; }
+    if ((a = t.getAttribute('data-sckey')) !== null && a !== undefined) {
+      scaleUI.pc = parseInt(a, 10); keepScroll(); render(); return;
+    }
+    if ((a = t.getAttribute('data-schands'))) { scaleUI.hands = a; keepScroll(); render(); return; }
+    if ((a = t.getAttribute('data-scoct'))) { scaleUI.octaves = parseInt(a, 10); keepScroll(); render(); return; }
+    if (t.hasAttribute('data-scplay')) {
+      var psc = window.Scales.scale(scaleUI.pc, scaleUI.type, scaleUI.octaves, 4);
+      var up = psc.notes.map(function (n) { return n.midi; });
+      var down = up.slice(0, -1).reverse();
+      A.playSequence(up.concat(down), 96);
+      return;
+    }
+    if (t.hasAttribute('data-scdone')) {
+      S.markScale(scaleUI.type, scaleUI.pc); keepScroll(); render(); return;
+    }
 
     if (t.hasAttribute('data-export')) {
       var ta = $('[data-io]'); ta.hidden = false; ta.value = S.exportJSON(); ta.select(); return;
