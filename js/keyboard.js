@@ -28,8 +28,9 @@
   }
 
   /* render(notes, opts) -> SVG string.
-     notes: [{midi, name, hand:'L'|'R', bass}]
-     opts: { low, high, width, labels } */
+     notes: [{midi, name, hand:'L'|'R', bass, finger}]
+     opts: { low, high, width, labels }
+     A note carrying a `finger` gets a numbered badge above its name. */
   function render(notes, opts) {
     notes = notes || [];
     opts = opts || {};
@@ -53,6 +54,11 @@
     }
 
     var whites = '', blacks = '', labels = '';
+    function badge(cx, cy, r, n) {
+      return '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="var(--key-finger)"/>' +
+        '<text x="' + cx + '" y="' + (cy + r * 0.42) + '" text-anchor="middle" font-size="' + (r * 1.35) +
+        '" font-weight="800" fill="var(--key-finger-fg)">' + n + '</text>';
+    }
     for (var m = low; m <= high; m++) {
       var x = (whiteIndex(m) - wLow) * kw;
       var hit = byMidi[m];
@@ -64,6 +70,7 @@
             '" text-anchor="middle" font-size="13" font-weight="700" fill="var(--key-label-dark)">' +
             esc(hit.name) + '</text>';
         }
+        if (hit && hit.finger) labels += badge(x + (kw - 1) / 2, kh - 36, 8, hit.finger);
       } else {
         var bx = x + (kw - bw / 2) - kw / 2 + kw / 2; // centre on the boundary
         bx = (whiteIndex(m) - wLow) * kw + (kw - bw) / 2 + kw / 2 - kw / 2;
@@ -75,6 +82,7 @@
             '" text-anchor="middle" font-size="11" font-weight="700" fill="var(--key-label-dark)">' +
             esc(hit.name) + '</text>';
         }
+        if (hit && hit.finger) labels += badge(bx + bw / 2, bh - 30, 6.5, hit.finger);
       }
     }
     return '<svg class="kbd" viewBox="0 0 ' + w + ' ' + h + '" width="100%" ' +

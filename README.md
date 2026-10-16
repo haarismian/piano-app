@@ -89,6 +89,26 @@ starting over.
   fingering numbers, a keyboard diagram, the notes by degree, one or two
   octaves, and playback. Mark a key practised and the grid tracks which of the
   twelve you have covered.
+- **Energy** — the same chords at five levels of intensity, for when the verse
+  and chorus use identical chords but need completely different energy. Pick
+  your song's progression (presets include the *Hello* loop, Fm–Ab–Eb–Db, or type
+  your own numbers) and every drill follows it.
+  - **The energy ladder** — *Whisper, Flow, Lift, Drive, Slam* (pp to ff). Each
+    level is a fixed recipe across four dials: left-hand shape (root → fifth →
+    octave → low root-fifth-octave), right-hand shape (close triad → doubled
+    four-note chord up high), rhythm (shown as a one-bar grid) and touch
+    (fingertip → wrist → forearm → whole arm). Every chord is drawn per hand
+    with **finger numbers on the keys**, and **Play along** loops the pattern
+    at your tempo while highlighting the current chord.
+  - **Lanes** — the same progression starting from each inversion, which decides
+    the top note of every chord after it.
+  - **Song map** — set a level for each section (intro, verse, pre-chorus,
+    chorus, bridge, final chorus…) and play the whole song's energy shape.
+  - **15 drills** in four blocks: inversions and fingering, the five ladder
+    levels, switching sections on the downbeat (verse → chorus, build and drop,
+    a random level caller, the full map), and loud-without-strain technique
+    (arm-weight octaves, weighting the top note, accent control). Rate each one
+    Shaky / OK / Solid; the next drill to do is always pointed out.
 - **Reference** — key explorer (every chord in a key, triads or sevenths), a
   progression transposed into all 12 keys, chord lookup with every inversion and
   shell/rootless voicings, plus the practice tools (random chord caller,
@@ -120,6 +140,7 @@ index.html         app shell
 css/style.css      styles (follows your system light/dark setting)
 js/theory.js       note spelling, chords, voicings, keys, transposition
 js/scales.js       scale spelling, key signatures, derived fingerings
+js/energy.js       energy levels, per-level voicings, derived chord fingerings, drills
 js/keyboard.js     SVG keyboard renderer
 js/notation.js     SVG music engraver (staff, clefs, key signatures, notes)
 js/audio.js        WebAudio chord playback and metronome

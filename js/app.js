@@ -741,6 +741,481 @@
     return html;
   }
 
+  // ---------------------------------------------------------------- energy
+  /* The Energy tab: one song's chords at five intensities, the inversions and
+     fingerings underneath them, and drills for switching between them.
+     Theory and content live in energy.js; this is the view. */
+  var ALL_KEYS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+  var energyUI = { level: 4, lane: 'auto', hands: 'both', openDrill: null, invHand: 'R',
+                   playing: null, loop: true, called: 0 };
+
+  function E() { return window.Energy; }
+
+  function songChords() {
+    var song = S.energy().song;
+    var syms = T.numbersToChords(song.numbers, song.key).filter(function (c) {
+      return T.parseChord(c) && T.chordNotes(c).length;
+    }).slice(0, 8);
+    return syms.length ? syms : T.numbersToChords('1 4 5', song.key);
+  }
+
+  function laneStart() { return energyUI.lane === 'auto' ? null : parseInt(energyUI.lane, 10); }
+
+  function forHands(v, hands) {
+    return { sym: v.sym, rh: hands === 'L' ? [] : v.rh, lh: hands === 'R' ? [] : v.lh,
+             inversion: v.inversion, top: v.top };
+  }
+
+  /* One chord at one level: right hand above, left hand below, each on its own
+     keyboard so the finger numbers stay legible at phone width. */
+  function energyBox(label, v, ranges, barKey, sub) {
+    var all = v.rh.concat(v.lh).map(function (n) { return n.midi; });
+    return '<div class="chordbox ebox" data-bar="' + esc(barKey) + '">' +
+      '<div class="name">' + esc(label) +
+      '<button class="play" data-play="' + all.join(',') + '" title="Hear it">&#9654;</button>' +
+      (sub ? '<span class="spell">' + esc(sub) + '</span>' : '') + '</div>' +
+      (v.rh.length ? '<div class="handrow"><span class="hand r">RH</span><div class="kbdwrap">' +
+        K.render(v.rh, ranges.rh) + '</div></div>' : '') +
+      (v.lh.length ? '<div class="handrow"><span class="hand l">LH</span><div class="kbdwrap">' +
+        K.render(v.lh, ranges.lh) + '</div></div>' : '') +
+      '</div>';
+  }
+
+  function handRanges(voiced) {
+    return {
+      rh: spanOf(voiced.map(function (v) { return v.rh; }).filter(function (x) { return x.length; })),
+      lh: spanOf(voiced.map(function (v) { return v.lh; }).filter(function (x) { return x.length; }))
+    };
+  }
+
+  /* Every chord of the song at a level, as a row of boxes. */
+  function levelRow(rowId, n, hands, start) {
+    var syms = songChords();
+    var nums = String(S.energy().song.numbers).trim().split(/\s+/);
+    var voiced = E().voiceSong(syms, n, start).map(function (v) { return forHands(v, hands); });
+    var ranges = handRanges(voiced);
+    return '<div class="chordset">' + voiced.map(function (v, i) {
+      var sub = (v.rh.length ? 'top: ' + v.top : '') +
+        (v.rh.length && v.inversion != null ? ' · ' + E().INV_NAME[v.inversion] : '');
+      return energyBox((nums[i] ? nums[i] + '  ·  ' : '') + v.sym, v, ranges, rowId + ':' + i, sub);
+    }).join('') + '</div>';
+  }
+
+  /* Bars for the groove player: each voiced chord at its level. */
+  function levelBars(rowId, n, hands, start, loops) {
+    var voiced = E().voiceSong(songChords(), n, start);
+    var bars = [];
+    for (var l = 0; l < (loops || 1); l++) {
+      voiced.forEach(function (v, i) {
+        bars.push({ events: E().barEvents(forHands(v, hands), n), key: rowId + ':' + i });
+      });
+    }
+    return bars;
+  }
+
+  function rhythmGrid(n) {
+    var g = E().grid(n), counts = ['1', '&', '2', '&', '3', '&', '4', '&'];
+    function cells(row) {
+      return row.map(function (c) {
+        return '<i class="' + (c === 'X' ? 'acc' : c === 'x' ? 'hit' : c === '-' ? 'hold' : '') + '"></i>';
+      }).join('');
+    }
+    return '<div class="rgrid" aria-label="Rhythm, one bar in eighth notes">' +
+      '<span></span>' + counts.map(function (c) { return '<b>' + c + '</b>'; }).join('') +
+      '<span class="hand r">RH</span>' + cells(g.rh) +
+      '<span class="hand l">LH</span>' + cells(g.lh) + '</div>' +
+      '<p class="tiny muted rlegend"><i class="hit"></i> strike <i class="acc"></i> accent <i class="hold"></i> hold</p>';
+  }
+
+  function playBtn(id, label) {
+    var on = energyUI.playing === id;
+    return '<button class="mini' + (on ? ' on' : '') + '" data-en="play:' + id + '">' +
+      (on ? '&#9632; Stop' : '&#9654; ' + esc(label || 'Play along')) + '</button>';
+  }
+
+  /* What each play button plays, by id. */
+  function playable(id) {
+    var parts = id.split(':'), kind = parts[0];
+    var song = S.energy().song;
+    if (kind === 'ladder') {
+      return { bars: levelBars('lad', energyUI.level, energyUI.hands, laneStart(), 1), loop: energyUI.loop };
+    }
+    if (kind === 'lvl') {           // lvl:<n>:<hands>
+      return { bars: levelBars('d-' + parts[1] + parts[2], +parts[1], parts[2], null, 1), loop: true };
+    }
+    if (kind === 'lane') {          // lane:<start>
+      return { bars: levelBars('lane' + parts[1], 1, 'R', +parts[1], 1), loop: true };
+    }
+    if (kind === 'switch') {        // switch:<a>:<b> — two loops of each
+      return { bars: levelBars('sw' + parts[1], +parts[1], 'both', null, 2)
+        .concat(levelBars('sw' + parts[2], +parts[2], 'both', null, 2)), loop: true };
+    }
+    if (kind === 'build') {         // one loop per level, 1 up to 5, then the drop
+      var b = [];
+      [1, 2, 3, 4, 5, 1].forEach(function (n, i) {
+        b = b.concat(levelBars('build' + (i === 5 ? 'drop' : n), n, 'both', null, 1));
+      });
+      return { bars: b, loop: false };
+    }
+    if (kind === 'map') {
+      var mb = [];
+      S.energy().map.forEach(function (n, i) {
+        if (n) mb = mb.concat(levelBars('map' + i, n, 'both', null, 1));
+      });
+      return { bars: mb, loop: false };
+    }
+    return { bars: [], loop: false, bpm: song.bpm };
+  }
+
+  function highlightBar(key) {
+    $$('.ebox.now,.mapbar.now,.buildwrap.now').forEach(function (n) { n.classList.remove('now'); });
+    var row = key.split(':')[0];
+    var box = $('[data-bar="' + key + '"]');
+    if (box) box.classList.add('now');
+    var mi = /^map(\d+)$/.exec(row);
+    if (mi) { var mbar = $('[data-mapbar="' + mi[1] + '"]'); if (mbar) mbar.classList.add('now'); }
+    var bi = /^build(\d|drop)$/.exec(row);
+    if (bi) {
+      $$('.buildwrap.now').forEach(function (n) { n.classList.remove('now'); });
+      var lb = $('[data-buildlvl="' + (bi[1] === 'drop' ? 1 : bi[1]) + '"]');
+      if (lb) lb.classList.add('now');
+    }
+  }
+
+  function startPlaying(id) {
+    var p = playable(id);
+    if (!p.bars.length) return;
+    energyUI.playing = id;
+    A.grooveStart({
+      bars: p.bars, bpm: S.energy().song.bpm || 80, loop: p.loop,
+      onBar: function (i) { highlightBar(p.bars[i].key); },
+      onEnd: function () { energyUI.playing = null; keepScroll(); render(); }
+    });
+  }
+
+  function stopPlaying() {
+    A.grooveStop();
+    energyUI.playing = null;
+  }
+
+  function renderEnergy() {
+    var Eg = E(), st = S.energy(), song = st.song;
+    var preset = Eg.SONGS.filter(function (s) { return s.id === song.id; })[0] || Eg.SONGS[Eg.SONGS.length - 1];
+    var syms = songChords();
+    var nums = String(song.numbers).trim().split(/\s+/);
+
+    var html = '<div class="hero">' +
+      '<div class="pill">Energy</div>' +
+      '<h1>Same chords, different size</h1>' +
+      '<p class="goal"><b>Goal</b> Play your song\'s chords at five levels of energy, and switch between them on the downbeat.</p>' +
+      '<details class="why"><summary>Why hitting harder isn\'t enough</summary>' +
+      '<p>A verse and a chorus often use the very same chords. On the piano, "bigger" is four dials turned together: ' +
+      '<b>register</b> (how low the bass goes, how high the right hand sits), <b>density</b> (two notes at the bottom, ' +
+      'seven at the top), <b>rhythm</b> (how often you strike) and <b>touch</b> (fingertip, wrist, forearm, whole arm). ' +
+      'Slamming a thin three-note chord just sounds harsh. Octaves in the left hand and doubled notes in the right, ' +
+      'dropped in with relaxed arm weight, sound huge without strain.</p>' +
+      '<p>Inversions are what make that possible: they keep the hands in one place so the changes stay fast at any ' +
+      'volume, and they decide which note is on top — the one the ear follows.</p></details>' +
+      '</div>';
+
+    // --- your song ---
+    html += '<div class="card"><h3>Your song</h3>' +
+      '<div class="row" style="margin:12px 0">' +
+      '<label class="f">Progression<select data-ensel="song">' + Eg.SONGS.map(function (s) {
+        return '<option value="' + s.id + '"' + (s.id === preset.id ? ' selected' : '') + '>' + esc(s.name) + '</option>';
+      }).join('') + '</select></label>' +
+      '<label class="f">Key<select data-ensel="key">' + ALL_KEYS.map(function (k) {
+        return '<option' + (k === song.key ? ' selected' : '') + '>' + k + '</option>';
+      }).join('') + '</select></label>' +
+      '<label class="f">Numbers<input type="text" data-ennum value="' + esc(song.numbers) + '" size="10"></label>' +
+      '<label class="f">Tempo<span class="row" style="gap:6px"><input type="range" data-enbpm min="50" max="140" value="' +
+      (song.bpm || 80) + '"><output data-enbpm-out>' + (song.bpm || 80) + '</output></span></label>' +
+      '</div>' +
+      '<div class="chart">' + syms.map(function (c, i) {
+        return '<span><i>' + esc(nums[i] || '') + '</i>' + esc(c) + '</span>';
+      }).join('') + '</div>' +
+      '<p class="tiny muted" style="margin:0">' + esc(preset.blurb) +
+      ' Type any chord numbers — <b>1 5 6 4</b>, <b>6 4 1 5</b> — and every drill below follows.</p></div>';
+
+    // --- the ladder ---
+    var lv = Eg.level(energyUI.level);
+    html += '<div class="card"><div class="spread"><h3>The energy ladder</h3>' +
+      '<span class="tiny muted">tap a level</span></div>' +
+      '<div class="ladder">' + Eg.LEVELS.map(function (l) {
+        return '<button class="rung' + (l.n === energyUI.level ? ' on' : '') + '" data-en="level:' + l.n + '">' +
+          '<i style="height:' + (8 + l.n * 7) + 'px"></i><b>' + l.n + ' ' + esc(l.name) + '</b><span>' + l.dyn + '</span></button>';
+      }).join('') + '</div>' +
+      '<p class="small" style="margin:12px 0 6px"><b>' + esc(lv.name) + '</b> <span class="muted">— ' + esc(lv.when) + '</span></p>' +
+      '<dl class="dials">' +
+      '<dt>Left hand</dt><dd>' + esc(lv.lh) + '</dd>' +
+      '<dt>Right hand</dt><dd>' + esc(lv.rh) + '</dd>' +
+      '<dt>Rhythm</dt><dd>' + esc(lv.rhythm) + '</dd>' +
+      '<dt>Touch</dt><dd>' + esc(lv.touch) + '</dd></dl>' +
+      rhythmGrid(lv.n) +
+      '<div class="row scaleopts">' +
+      '<span class="seg">' + [['auto', 'Smoothest'], ['0', 'Lane A'], ['1', 'Lane B'], ['2', 'Lane C']].map(function (o) {
+        return '<button class="' + (energyUI.lane === o[0] ? 'on' : '') + '" data-en="lane:' + o[0] + '">' + o[1] + '</button>';
+      }).join('') + '</span>' +
+      '<span class="seg">' + [['both', 'Both'], ['R', 'RH'], ['L', 'LH']].map(function (o) {
+        return '<button class="' + (energyUI.hands === o[0] ? 'on' : '') + '" data-en="hands:' + o[0] + '">' + o[1] + '</button>';
+      }).join('') + '</span>' +
+      playBtn('ladder', 'Play along') +
+      '<label class="tiny muted chk"><input type="checkbox" data-en="loop"' + (energyUI.loop ? ' checked' : '') + '> loop</label>' +
+      '</div>' +
+      '<p class="tiny muted" style="margin:4px 0 0">Numbers on the keys are fingers. Blue is the left hand, orange the right.</p>' +
+      levelRow('lad', lv.n, energyUI.hands, laneStart()) + '</div>';
+
+    // --- song map ---
+    html += renderSongMap();
+
+    // --- drills ---
+    html += renderDrills();
+    return html;
+  }
+
+  function renderSongMap() {
+    var Eg = E(), map = S.energy().map;
+    var html = '<div class="card"><div class="spread"><div><h3>Song map</h3>' +
+      '<p class="tiny muted" style="margin:2px 0 0">Set the level of each section of your song. Off skips it.</p></div>' +
+      playBtn('map', 'Play map') + '</div>' +
+      '<div class="mapbars">' + Eg.SECTIONS.map(function (name, i) {
+        return '<div class="mapbar' + (map[i] ? '' : ' off') + '" data-mapbar="' + i + '">' +
+          '<i style="height:' + (map[i] ? 10 + map[i] * 14 : 4) + 'px"></i><span>' + esc(name) + '</span></div>';
+      }).join('') + '</div>' +
+      '<div class="maprows">' + Eg.SECTIONS.map(function (name, i) {
+        return '<div class="maprow"><span>' + esc(name) + '</span><span class="seg">' +
+          [0, 1, 2, 3, 4, 5].map(function (n) {
+            return '<button class="' + (map[i] === n ? 'on' : '') + '" data-en="map:' + i + ':' + n + '"' +
+              (n ? ' title="' + esc(Eg.level(n).name) + '"' : '') + '>' + (n || 'off') + '</button>';
+          }).join('') + '</span><span class="tiny muted">' + (map[i] ? esc(Eg.level(map[i]).name) : '') + '</span></div>';
+      }).join('') + '</div></div>';
+    return html;
+  }
+
+  function drillStatus(d) {
+    var r = S.drillRec(d.id);
+    if (!r.count) return { label: 'new', cls: '' };
+    return { label: r.grade + ' · ' + r.count + '×', cls: r.grade === 'solid' ? 'hit' : '' };
+  }
+
+  /* The next drill to do: the first never tried or last rated shaky, in
+     order; once everything has been met, whichever was done longest ago. */
+  function nextDrill() {
+    var D = E().DRILLS;
+    for (var i = 0; i < D.length; i++) {
+      var r = S.drillRec(D[i].id);
+      if (!r.count || r.grade === 'shaky') return D[i];
+    }
+    return D.slice().sort(function (a, b) {
+      return String(S.drillRec(a.id).last).localeCompare(String(S.drillRec(b.id).last));
+    })[0];
+  }
+
+  function renderDrills() {
+    var Eg = E(), D = Eg.DRILLS;
+    var solid = D.filter(function (d) { return S.drillRec(d.id).grade === 'solid'; }).length;
+    var tried = D.filter(function (d) { return S.drillRec(d.id).count; }).length;
+    var nx = nextDrill();
+    var html = '<div class="card"><div class="spread"><h3>Drills</h3>' +
+      '<span class="tiny muted">' + tried + ' of ' + D.length + ' tried · ' + solid + ' solid</span></div>' +
+      '<div class="meter"><i style="width:' + Math.round(solid / D.length * 100) + '%"></i></div>' +
+      '<p class="small muted" style="margin:0 0 6px">Work top to bottom — the shapes first, then the ladder, then the switches. ' +
+      'Up next: <button class="linky" data-en="drill:' + nx.id + '">' + esc(nx.title) + '</button></p>';
+
+    Eg.BLOCKS.forEach(function (b) {
+      html += '<div class="dblock"><h4 class="eyebrow">' + esc(b.title) + '</h4>' +
+        '<p class="tiny muted" style="margin:2px 0 6px">' + esc(b.blurb) + '</p><ul class="exlist">';
+      D.filter(function (d) { return d.block === b.id; }).forEach(function (d) {
+        var stt = drillStatus(d), open = energyUI.openDrill === d.id;
+        html += '<li class="' + (open ? 'open' : '') + '" data-drillrow="' + d.id + '">' +
+          '<button class="exrow" data-en="drill:' + d.id + '"><span class="exname">' + esc(d.title) + '</span>' +
+          '<span class="reps ' + stt.cls + '">' + esc(stt.label) + '</span></button>' +
+          (open ? drillBody(d) : '') + '</li>';
+      });
+      html += '</ul></div>';
+    });
+    return html + '</div>';
+  }
+
+  function drillBody(d) {
+    var r = S.drillRec(d.id);
+    var detail = r.count < 2 || energyUI.detail === d.id;
+    var html = '<div class="drillbody">' +
+      '<div class="chips"><span class="pill">' + d.minutes + ' min</span>' +
+      (d.bpm ? '<span class="pill">' + d.bpm.start + '–' + d.bpm.goal + ' bpm</span>' : '') +
+      '<span class="pill key">' + esc(S.energy().song.key) + '</span>' +
+      '<span class="tiny muted">' + (r.count ? 'done ' + r.count + '×, last ' + esc(r.last) + ' (' + esc(r.grade) + ')' : 'first time') + '</span>' +
+      (r.count >= 2 ? '<button class="linky right" data-en="detail:' + d.id + '">' + (detail ? 'Hide detail' : 'Show detail') + '</button>' : '') +
+      '</div>' +
+      '<ol class="cues' + (detail ? ' withnotes' : '') + '">' + d.steps.map(function (s) {
+        return '<li>' + esc(s.do) + (detail && s.note ? '<span class="note">' + esc(s.note) + '</span>' : '') + '</li>';
+      }).join('') + '</ol>' +
+      '<p class="target"><b>Done when</b> ' + esc(d.target) + '</p>';
+
+    html += drillShow(d);
+    if (d.tool === 'level-caller') html += levelCaller();
+    if (d.bpm) html += toolHTML('metronome', d);
+
+    html += '<div class="gradebar"><span class="tiny muted">How did that go?</span>' +
+      '<button class="mini g-shaky" data-en="rate:' + d.id + ':shaky">Shaky</button>' +
+      '<button class="mini g-ok" data-en="rate:' + d.id + ':ok">OK</button>' +
+      '<button class="mini g-solid" data-en="rate:' + d.id + ':solid">Solid</button></div>' +
+      '<p class="tiny muted gradehint">Rating logs it and opens the next drill. Shaky ones come back as "up next".</p>' +
+      '</div>';
+    return html;
+  }
+
+  function drillShow(d) {
+    var sh = d.show || {}, Eg = E();
+    if (sh.kind === 'level') {
+      var hands = sh.hands || 'both';
+      var id = 'lvl:' + sh.level + ':' + hands;
+      return '<div class="row" style="margin-top:10px">' + playBtn(id, 'Play along') +
+        '<span class="tiny muted">Level ' + sh.level + ' — ' + esc(Eg.level(sh.level).name) +
+        (hands === 'both' ? '' : hands === 'R' ? ', right hand' : ', left hand') + '</span></div>' +
+        (sh.level > 1 ? rhythmGrid(sh.level) : '') +
+        levelRow('d-' + sh.level + hands, sh.level, hands, null);
+    }
+    if (sh.kind === 'inversions') {
+      var hand = energyUI.invHand;
+      var seen = {}, html = '<div class="row" style="margin-top:12px"><span class="seg">' +
+        [['R', 'Right hand'], ['L', 'Left hand']].map(function (o) {
+          return '<button class="' + (hand === o[0] ? 'on' : '') + '" data-en="invhand:' + o[0] + '">' + o[1] + '</button>';
+        }).join('') + '</span></div>';
+      songChords().forEach(function (sym) {
+        if (seen[sym]) return;
+        seen[sym] = true;
+        var invs = Eg.inversions(sym, hand);
+        var range = spanOf(invs.map(function (x) { return x.notes; }));
+        html += '<h4 class="invhead">' + esc(sym) + '</h4><div class="chordset">' +
+          invs.map(function (x) {
+            return chordBox(x.label, x.notes, 'top: ' + x.top, range);
+          }).join('') + '</div>';
+      });
+      return html;
+    }
+    if (sh.kind === 'lanes') {
+      var out = '';
+      [0, 1, 2].forEach(function (s) {
+        var v = Eg.voiceSong(songChords(), 1, s);
+        var line = v.map(function (c) { return c.rh[c.rh.length - 1].name; }).join(' – ');
+        out += '<div class="lanehead"><b>Lane ' + 'ABC'[s] + '</b>' +
+          '<span class="tiny muted">starts in ' + Eg.INV_NAME[s] + ' · top line ' + esc(line) + '</span>' +
+          playBtn('lane:' + s, 'Play') + '</div>' + levelRow('lane' + s, 1, 'R', s);
+      });
+      return out;
+    }
+    if (sh.kind === 'switch') {
+      var a = sh.levels[0], b = sh.levels[1];
+      return '<div class="row" style="margin-top:10px">' + playBtn('switch:' + a + ':' + b, 'Play the switch') +
+        '<span class="tiny muted">two loops of each, round and round</span></div>' +
+        '<h4 class="eyebrow" style="margin-top:14px">Verse — level ' + a + ', ' + esc(Eg.level(a).name) + '</h4>' +
+        levelRow('sw' + a, a, 'both', null) +
+        '<h4 class="eyebrow" style="margin-top:14px">Chorus — level ' + b + ', ' + esc(Eg.level(b).name) + '</h4>' +
+        levelRow('sw' + b, b, 'both', null);
+    }
+    if (sh.kind === 'ladder') {
+      // the first chord at all five sizes, both hands on one keyboard, so the
+      // spread itself is what you see grow
+      var sym = songChords()[0];
+      var sets = [1, 2, 3, 4, 5].map(function (n) {
+        var v = Eg.voiceSong([sym], n)[0];
+        return v.lh.concat(v.rh).map(function (x) { return { midi: x.midi, name: x.name, hand: x.hand }; });
+      });
+      var rg = spanOf(sets);
+      return '<div class="row" style="margin-top:10px">' + playBtn('build', 'Play the build and drop') + '</div>' +
+        '<p class="tiny muted" style="margin:8px 0 0">' + esc(sym) + ' at every level. Watch the hands spread apart.</p>' +
+        '<div class="chordset wide">' + sets.map(function (notes, i) {
+          return '<div class="buildwrap" data-buildlvl="' + (i + 1) + '">' +
+            chordBox((i + 1) + ' · ' + Eg.level(i + 1).name + ' (' + Eg.level(i + 1).dyn + ')', notes,
+              notes.length + ' notes', rg) + '</div>';
+        }).join('') + '</div>';
+    }
+    if (sh.kind === 'map') {
+      var map = S.energy().map;
+      return '<div class="row" style="margin-top:10px">' + playBtn('map', 'Play map') +
+        '<span class="tiny muted">' + Eg.SECTIONS.map(function (n, i) {
+          return map[i] ? esc(n) + ' ' + map[i] : null;
+        }).filter(Boolean).join(' → ') + '</span></div>' +
+        '<p class="tiny muted">Edit the map in the Song map card above.</p>';
+    }
+    return '';
+  }
+
+  function levelCaller() {
+    var n = energyUI.called, lv = n ? E().level(n) : null;
+    return '<div class="tool"><h4>Level caller</h4>' +
+      '<div class="bigcall">' + (lv ? n + ' · ' + esc(lv.name) + '<small>' + esc(lv.lh) + ' / ' + esc(lv.rhythm) + '</small>'
+        : '—<small>loop your song, then press call</small>') + '</div>' +
+      '<button class="mini" data-en="call">Call a level</button></div>';
+  }
+
+  function energyClick(arg) {
+    var p = arg.split(':'), act = p[0];
+    if (act === 'level') { energyUI.level = +p[1]; restartIfPlaying('ladder'); }
+    else if (act === 'lane') { energyUI.lane = p[1]; restartIfPlaying('ladder'); }
+    else if (act === 'hands') { energyUI.hands = p[1]; restartIfPlaying('ladder'); }
+    else if (act === 'loop') { energyUI.loop = !energyUI.loop; restartIfPlaying('ladder'); }
+    else if (act === 'invhand') { energyUI.invHand = p[1]; }
+    else if (act === 'detail') { energyUI.detail = energyUI.detail === p[1] ? null : p[1]; }
+    else if (act === 'map') { S.setEnergyMap(+p[1], +p[2]); if (energyUI.playing === 'map') stopPlaying(); }
+    else if (act === 'play') {
+      var id = p.slice(1).join(':');
+      if (energyUI.playing === id) stopPlaying(); else startPlaying(id);
+    }
+    else if (act === 'drill') {
+      stopPlaying();
+      energyUI.openDrill = energyUI.openDrill === p[1] ? null : p[1];
+      render();
+      var row = energyUI.openDrill && $('[data-drillrow="' + energyUI.openDrill + '"]');
+      if (row) row.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    else if (act === 'rate') {
+      stopPlaying();
+      S.rateDrill(p[1], p[2]);
+      var D = E().DRILLS, cur = E().drill(p[1]);
+      var nxt = D[cur.index + 1];
+      energyUI.openDrill = nxt ? nxt.id : null;
+      render();
+      var r2 = nxt && $('[data-drillrow="' + nxt.id + '"]');
+      if (r2) r2.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    else if (act === 'call') {
+      var n;
+      do { n = 1 + Math.floor(Math.random() * 5); } while (n === energyUI.called);
+      energyUI.called = n;
+    }
+    keepScroll(); render();
+  }
+
+  /* Changing the ladder while it plays swaps what you hear straight away. */
+  function restartIfPlaying(id) {
+    if (energyUI.playing === id) startPlaying(id);
+  }
+
+  function energySongChange(field, value) {
+    var Eg = E();
+    if (field === 'song') {
+      var s = Eg.SONGS.filter(function (x) { return x.id === value; })[0];
+      if (s) S.setEnergySong({ id: s.id, numbers: s.numbers, key: s.key, bpm: s.bpm });
+    } else if (field === 'key') {
+      S.setEnergySong({ key: value });
+    } else if (field === 'numbers') {
+      // typing your own numbers makes it your own progression
+      var cur = S.energy().song;
+      var preset = Eg.SONGS.filter(function (x) { return x.id === cur.id; })[0];
+      var patch = { numbers: value };
+      if (preset && preset.numbers !== value.trim()) patch.id = 'custom';
+      S.setEnergySong(patch);
+    }
+    var was = energyUI.playing;
+    stopPlaying();
+    keepScroll(); render();
+    if (was) startPlaying(was);
+  }
+
   // ---------------------------------------------------------------- progress
   function renderProgress() {
     var st = S.load();
@@ -838,6 +1313,7 @@
       view === 'today' ? renderToday() :
       view === 'path' ? renderPath() :
       view === 'scales' ? renderScales() :
+      view === 'energy' ? renderEnergy() :
       view === 'ref' ? renderRef() : renderProgress();
     nextLine();
     $$('#tabs button').forEach(function (b) {
@@ -851,11 +1327,16 @@
 
   // ---------------------------------------------------------------- events
   document.addEventListener('click', function (ev) {
-    var t = ev.target.closest ? ev.target.closest('[data-view],[data-dur],[data-start],[data-open],[data-grade],[data-detail],[data-undone],[data-skip],[data-abandon],[data-finish],[data-unit],[data-pass],[data-unpass],[data-practice],[data-jump],[data-drill],[data-pathclear],[data-play],[data-met],[data-call],[data-reveal],[data-timer-toggle],[data-timer-reset],[data-export],[data-import],[data-reset],[data-sctype],[data-sckey],[data-schands],[data-scoct],[data-scplay],[data-scdone]') : null;
+    var t = ev.target.closest ? ev.target.closest('[data-view],[data-dur],[data-start],[data-open],[data-grade],[data-detail],[data-undone],[data-skip],[data-abandon],[data-finish],[data-unit],[data-pass],[data-unpass],[data-practice],[data-jump],[data-drill],[data-pathclear],[data-play],[data-met],[data-call],[data-reveal],[data-timer-toggle],[data-timer-reset],[data-export],[data-import],[data-reset],[data-sctype],[data-sckey],[data-schands],[data-scoct],[data-scplay],[data-scdone],[data-en]') : null;
     if (!t) return;
     var a;
 
-    if ((a = t.getAttribute('data-view'))) { view = a; openStep = openStep; render(); return; }
+    if ((a = t.getAttribute('data-view'))) {
+      if (a !== 'energy') stopPlaying();
+      view = a; render(); return;
+    }
+
+    if ((a = t.getAttribute('data-en'))) { energyClick(a); return; }
 
     if ((a = t.getAttribute('data-dur'))) { S.setting('minutes', parseInt(a, 10)); keepScroll(); render(); return; }
 
@@ -1008,6 +1489,8 @@
 
   document.addEventListener('change', function (ev) {
     var t = ev.target, a = t.getAttribute && t.getAttribute('data-ref');
+    var en = t.getAttribute && t.getAttribute('data-ensel');
+    if (en) { energySongChange(en, t.value); return; }
     if (a) {
       ref[a] = (a === 'sevenths') ? t.value === '1' : t.value;
       keepScroll(); render(); return;
@@ -1023,6 +1506,24 @@
         var box = $('[data-pathq]');
         if (box) { box.focus(); box.setSelectionRange(val.length, val.length); }
       }, 250);
+      return;
+    }
+    if (t.hasAttribute && t.hasAttribute('data-ennum')) {
+      clearTimeout(window.__en);
+      var nv = t.value;
+      window.__en = setTimeout(function () {
+        if (!nv.trim()) return;
+        energySongChange('numbers', nv);
+        var box = $('[data-ennum]');
+        if (box) { box.focus(); box.setSelectionRange(nv.length, nv.length); }
+      }, 600);
+      return;
+    }
+    if (t.hasAttribute && t.hasAttribute('data-enbpm')) {
+      var bpm = parseInt(t.value, 10);
+      var o = $('[data-enbpm-out]'); if (o) o.value = bpm;
+      S.setEnergySong({ bpm: bpm });
+      A.grooveSetBpm(bpm);
       return;
     }
     if (t.getAttribute && t.getAttribute('data-note')) { S.setNote(t.getAttribute('data-note'), t.value); }
