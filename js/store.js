@@ -16,6 +16,7 @@
       active: null,      // the session currently in progress
       notes: {},         // exerciseId -> free text
       scales: {},        // '<typeId>:<pc>' -> { count, last }
+      energy: {},        // the Energy tab: { song, map, drills: {id -> {count, last, grade}} }
       settings: { minutes: 15, bpm: 80 }
     };
   }
@@ -183,6 +184,33 @@
     return n;
   }
 
+  // ---- energy tab ----
+  function energy() {
+    var s = load();
+    if (!s.energy || typeof s.energy !== 'object') s.energy = {};
+    var e = s.energy;
+    if (!e.drills) e.drills = {};
+    if (!e.song) {
+      var d = global.Energy.SONGS[0];
+      e.song = { id: d.id, numbers: d.numbers, key: d.key, bpm: d.bpm };
+    }
+    if (!e.map || e.map.length !== global.Energy.SECTIONS.length) e.map = global.Energy.DEFAULT_MAP.slice();
+    return e;
+  }
+  function setEnergySong(patch) {
+    var song = energy().song;
+    for (var k in patch) song[k] = patch[k];
+    save(); return song;
+  }
+  function setEnergyMap(i, lvl) { energy().map[i] = lvl; save(); }
+  function drillRec(id) { return energy().drills[id] || { count: 0, last: null, grade: null }; }
+  function rateDrill(id, grade) {
+    var e = energy();
+    var r = e.drills[id] || { count: 0, last: null, grade: null };
+    r.count++; r.last = today(); r.grade = grade;
+    e.drills[id] = r; save(); return r;
+  }
+
   function setNote(exId, text) { load().notes[exId] = text; save(); }
   function getNote(exId) { return load().notes[exId] || ''; }
 
@@ -211,6 +239,8 @@
     sessionNumber: sessionNumber, totalMinutes: totalMinutes, streak: streak,
     daysPractised: daysPractised, setNote: setNote, getNote: getNote, setting: setting,
     scaleRec: scaleRec, markScale: markScale, scaleCoverage: scaleCoverage,
+    energy: energy, setEnergySong: setEnergySong, setEnergyMap: setEnergyMap,
+    drillRec: drillRec, rateDrill: rateDrill,
     exportJSON: exportJSON, importJSON: importJSON, reset: reset
   };
 })(typeof window !== 'undefined' ? window : this);

@@ -7,6 +7,7 @@
   --key-white:#f4f5f8; --key-black:#20242e; --key-edge:#aeb4c6;
   --key-rh:#f0b464; --key-lh:#8ab4ff; --key-bass:#7dd3a0;
   --key-label-dark:#20242e; --key-label-light:#ffffff;
+  --key-finger:#20242e; --key-finger-fg:#ffffff;
   --r:10px;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
@@ -273,3 +274,62 @@ textarea{width:100%;background:var(--bg3);color:var(--fg);border:1px solid var(-
 .scalekbd{margin-top:14px}
 .scalekbd .kbd{max-width:560px}
 .scalekbd{margin-top:16px}
+
+/* ---------- energy ---------- */
+.ladder{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:12px}
+.rung{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;
+  background:var(--bg3);border:1px solid var(--line);border-radius:9px;padding:8px 2px 7px;min-height:86px}
+.rung i{display:block;width:60%;border-radius:4px 4px 1px 1px;background:color-mix(in srgb,var(--accent2) 55%,transparent)}
+.rung b{font-size:12.5px;font-weight:700;line-height:1.15;text-align:center}
+.rung span{font-size:11px;color:var(--dimmer);font-family:var(--mono);font-style:italic}
+.rung:hover{border-color:var(--dimmer)}
+.rung.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.rung.on i{background:var(--on-accent);opacity:.55}
+.rung.on span{color:var(--on-accent);opacity:.75}
+@media(max-width:520px){.rung b{font-size:11px}}
+
+dl.dials{display:grid;grid-template-columns:max-content 1fr;gap:5px 12px;margin:8px 0 10px;font-size:13.5px}
+dl.dials dt{color:var(--dimmer);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding-top:2px}
+dl.dials dd{margin:0}
+
+.rgrid{display:grid;grid-template-columns:34px repeat(8,minmax(0,34px));gap:4px;align-items:center;margin:6px 0 2px}
+.rgrid b{font-size:11px;color:var(--dimmer);text-align:center;font-family:var(--mono)}
+.rgrid i{display:block;height:20px;border-radius:5px;background:var(--bg3);border:1px solid var(--line)}
+.rgrid i.hit,.rlegend i.hit{background:color-mix(in srgb,var(--accent) 55%,transparent);border-color:var(--accent)}
+.rgrid i.acc,.rlegend i.acc{background:var(--accent);border-color:var(--accent);box-shadow:inset 0 -5px 0 rgba(0,0,0,.25)}
+.rgrid i.hold,.rlegend i.hold{background:color-mix(in srgb,var(--accent) 16%,transparent);border-style:dashed}
+.rlegend{display:flex;gap:6px;align-items:center;margin:4px 0 0}
+.rlegend i{display:inline-block;width:14px;height:11px;border-radius:3px;border:1px solid var(--line);margin-left:6px}
+.hand{font-size:10.5px;font-weight:800;letter-spacing:.05em;font-family:var(--mono)}
+.hand.r{color:var(--accent2)}
+.hand.l{color:var(--accent3)}
+
+.chk{display:inline-flex;gap:5px;align-items:center}
+.ebox .handrow{display:flex;gap:6px;align-items:center}
+.ebox .handrow .hand{flex:none;width:20px}
+.ebox .handrow .kbdwrap{flex:1;min-width:0}
+.ebox .kbd{margin:6px 0 2px}
+.ebox,.buildwrap{border-radius:9px;transition:background .12s,box-shadow .12s;padding:4px}
+.ebox.now,.buildwrap.now{background:color-mix(in srgb,var(--accent) 12%,transparent);
+  box-shadow:0 0 0 2px var(--accent)}
+.buildwrap{flex:1 1 100%}
+.buildwrap .chordbox{max-width:none}
+
+.mapbars{display:flex;align-items:flex-end;gap:5px;margin:14px 0 10px;min-height:96px}
+.mapbar{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+.mapbar i{display:block;width:100%;max-width:46px;border-radius:5px 5px 2px 2px;
+  background:color-mix(in srgb,var(--accent2) 60%,transparent);transition:height .15s}
+.mapbar.off i{background:var(--line)}
+.mapbar.now i{background:var(--accent)}
+.mapbar span{font-size:10.5px;color:var(--dimmer);text-align:center;line-height:1.15;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.maprows{display:flex;flex-direction:column;gap:5px}
+.maprow{display:grid;grid-template-columns:96px auto 1fr;gap:10px;align-items:center;font-size:13.5px}
+.maprow .seg button{padding:5px 9px;font-size:12px;min-width:30px}
+@media(max-width:520px){.maprow{grid-template-columns:80px auto}.maprow>.tiny{display:none}}
+
+.dblock{margin-top:14px}
+.exlist li.open{background:color-mix(in srgb,var(--bg3) 55%,transparent);border-radius:8px}
+.drillbody{padding:0 6px 14px}
+.lanehead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:16px 0 0}
+.invhead{font-size:15px;margin:16px 0 0;padding-top:10px;border-top:1px solid var(--line)}
